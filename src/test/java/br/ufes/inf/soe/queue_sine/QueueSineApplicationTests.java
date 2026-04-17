@@ -1,10 +1,10 @@
-package br.ufes.inf.soe.event_based_project;
+package br.ufes.inf.soe.queue_sine;
 
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.test.context.SpringBootTest;
 
 @SpringBootTest
-class EventBasedProjectApplicationTests {
+class QueueSineApplicationTests {
 
 	@Test
 	void contextLoads() {
