@@ -19,8 +19,8 @@ public class ProductController {
         this.productRepository = productRepository;
     }
 
-    @GetMapping("/{userId}")
-    public List<Product> listProducts(@PathVariable("userId") String userId) {
+    @GetMapping("/{clientId}")
+    public List<Product> listProducts(@PathVariable("clientId") String clientId) {
         return productRepository.findAll();
     }
 }
