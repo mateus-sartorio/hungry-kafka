@@ -1,0 +1,10 @@
+-- Flyway V5: create order_status table and seed values
+CREATE TABLE IF NOT EXISTS order_status (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL UNIQUE
+);
+
+INSERT INTO order_status(name) SELECT 'CREATED' WHERE NOT EXISTS (SELECT 1 FROM order_status WHERE name='CREATED');
+INSERT INTO order_status(name) SELECT 'ACCEPTED' WHERE NOT EXISTS (SELECT 1 FROM order_status WHERE name='ACCEPTED');
+INSERT INTO order_status(name) SELECT 'PREPARING' WHERE NOT EXISTS (SELECT 1 FROM order_status WHERE name='PREPARING');
+INSERT INTO order_status(name) SELECT 'OUT_FOR_DELIVERY' WHERE NOT EXISTS (SELECT 1 FROM order_status WHERE name='OUT_FOR_DELIVERY');
