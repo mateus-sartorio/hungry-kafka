@@ -25,6 +25,7 @@ public class OrderEntity {
     @JoinColumn(name = "status_id", nullable = false)
     private OrderStatusEntity status;
 
-    @Column(name = "created_at", nullable = false)
+    @Column(name = "created_at", nullable = false, columnDefinition = "TEXT")
+    @Convert(converter = InstantTextAttributeConverter.class)
     private Instant createdAt;
 }

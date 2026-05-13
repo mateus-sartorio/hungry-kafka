@@ -4,7 +4,7 @@ import br.ufes.inf.soe.queue_sine.config.TopicNames;
 import br.ufes.inf.soe.queue_sine.dto.CartEvent;
 import br.ufes.inf.soe.queue_sine.dto.ClickStreamEvent;
 import br.ufes.inf.soe.queue_sine.dto.ItemViewEvent;
-import br.ufes.inf.soe.queue_sine.dto.OrderEvent;
+import br.ufes.inf.soe.queue_sine.dto.CreateOrderRequest;
 import br.ufes.inf.soe.queue_sine.dto.OrderStatusEvent;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -37,8 +37,8 @@ public class EventProducer {
         send(TopicNames.ORDER_STATUS_EVENTS, event.getOrderId(), event);
     }
 
-    public void sendOrder(OrderEvent event) {
-        send(TopicNames.ORDER_EVENTS, event.getClientId(), event);
+    public void sendOrder(CreateOrderRequest event) {
+        send(TopicNames.ORDER_EVENTS, String.valueOf(event.getClientId()), event);
     }
 
     private void send(String topic, String key, Object event) {

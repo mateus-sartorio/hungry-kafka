@@ -32,4 +32,16 @@ public class ClientController {
         Optional<Client> found = clientRepository.findById(id);
         return found.map(ResponseEntity::ok).orElseGet(() -> ResponseEntity.notFound().build());
     }
+
+    @PatchMapping("/{id}")
+    public ResponseEntity<Client> updateClient(@PathVariable Integer id, @RequestBody CreateClientRequest req) {
+        Optional<Client> found = clientRepository.findById(id);
+        if (found.isEmpty()) {
+            return ResponseEntity.notFound().build();
+        }
+        Client client = found.get();
+        client.setName(req.getName());
+        Client saved = clientRepository.save(client);
+        return ResponseEntity.ok(saved);
+    }
 }

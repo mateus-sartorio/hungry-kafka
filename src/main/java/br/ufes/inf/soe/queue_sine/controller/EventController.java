@@ -4,7 +4,7 @@ import br.ufes.inf.soe.queue_sine.config.TopicNames;
 import br.ufes.inf.soe.queue_sine.dto.CartEvent;
 import br.ufes.inf.soe.queue_sine.dto.ClickStreamEvent;
 import br.ufes.inf.soe.queue_sine.dto.ItemViewEvent;
-import br.ufes.inf.soe.queue_sine.dto.OrderEvent;
+import br.ufes.inf.soe.queue_sine.dto.CreateOrderRequest;
 import br.ufes.inf.soe.queue_sine.dto.OrderStatusEvent;
 import br.ufes.inf.soe.queue_sine.producer.EventProducer;
 import org.springframework.http.HttpStatus;
@@ -80,15 +80,10 @@ public class EventController {
     }
 
     @PostMapping("/order")
-    public ResponseEntity<Map<String, String>> order(@RequestBody OrderEvent event) {
-        if (event.getEventId() == null) {
-            event.setEventId(UUID.randomUUID().toString());
-        }
-        if (event.getOccurredAt() == null) {
-            event.setOccurredAt(Instant.now());
-        }
+    public ResponseEntity<Map<String, String>> order(@RequestBody CreateOrderRequest event) {
+        String eventId = UUID.randomUUID().toString();
         eventProducer.sendOrder(event);
-        return accepted(TopicNames.ORDER_EVENTS, event.getEventId());
+        return accepted(TopicNames.ORDER_EVENTS, eventId);
     }
 
     private ResponseEntity<Map<String, String>> accepted(String topic, String eventId) {

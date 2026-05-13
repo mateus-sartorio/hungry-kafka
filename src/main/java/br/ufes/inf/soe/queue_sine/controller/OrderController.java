@@ -1,19 +1,26 @@
 package br.ufes.inf.soe.queue_sine.controller;
 
+import br.ufes.inf.soe.queue_sine.dto.OrderItemResponse;
 import br.ufes.inf.soe.queue_sine.dto.OrderResponse;
+import br.ufes.inf.soe.queue_sine.dto.ProductResponse;
 import br.ufes.inf.soe.queue_sine.entity.OrderEntity;
 import br.ufes.inf.soe.queue_sine.entity.OrderItem;
+import br.ufes.inf.soe.queue_sine.entity.Product;
 import br.ufes.inf.soe.queue_sine.repository.OrderItemRepository;
 import br.ufes.inf.soe.queue_sine.repository.OrderRepository;
+import br.ufes.inf.soe.queue_sine.repository.ProductRepository;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
-import java.util.LinkedHashMap;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 @RestController
@@ -22,10 +29,14 @@ public class OrderController {
 
     private final OrderRepository orderRepository;
     private final OrderItemRepository orderItemRepository;
+    private final ProductRepository productRepository;
 
-    public OrderController(OrderRepository orderRepository, OrderItemRepository orderItemRepository) {
+    public OrderController(OrderRepository orderRepository,
+                           OrderItemRepository orderItemRepository,
+                           ProductRepository productRepository) {
         this.orderRepository = orderRepository;
         this.orderItemRepository = orderItemRepository;
+        this.productRepository = productRepository;
     }
 
     @GetMapping
@@ -46,14 +57,39 @@ public class OrderController {
 
     private OrderResponse toResponse(OrderEntity order) {
         List<OrderItem> items = orderItemRepository.findByOrder_Id(order.getId());
-        Map<Integer, Integer> itemMap = new LinkedHashMap<>();
+
+        Set<Integer> productIds = new HashSet<>();
         for (OrderItem item : items) {
-            itemMap.put(item.getProductId(), item.getQuantity());
+            productIds.add(item.getProductId());
+        }
+
+        Map<Integer, Product> productsById = new HashMap<>();
+        for (Product product : productRepository.findAllById(productIds)) {
+            productsById.put(product.getId(), product);
+        }
+
+        List<OrderItemResponse> itemResponses = new ArrayList<>();
+        for (OrderItem item : items) {
+            Product product = productsById.get(item.getProductId());
+            if (product == null) {
+                continue;
+            }
+            itemResponses.add(new OrderItemResponse(toProductResponse(product), item.getQuantity()));
         }
 
         Integer clientId = order.getClient() != null ? order.getClient().getId() : null;
         String status = order.getStatus() != null ? order.getStatus().getName() : null;
 
-        return new OrderResponse(order.getId(), clientId, itemMap, order.getCreatedAt(), status);
+        return new OrderResponse(order.getId(), clientId, itemResponses, order.getCreatedAt(), status);
+    }
+
+    private ProductResponse toProductResponse(Product product) {
+        return new ProductResponse(
+                product.getId(),
+                product.getName(),
+                product.getDescription(),
+                product.getPrice(),
+                product.getPhotoUrl()
+        );
     }
 }
