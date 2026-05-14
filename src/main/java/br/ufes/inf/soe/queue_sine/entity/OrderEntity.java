@@ -28,4 +28,8 @@ public class OrderEntity {
     @Column(name = "created_at", nullable = false, columnDefinition = "TEXT")
     @Convert(converter = InstantTextAttributeConverter.class)
     private Instant createdAt;
+
+    @Column(name = "expected_delivery", columnDefinition = "TEXT")
+    @Convert(converter = InstantTextAttributeConverter.class)
+    private Instant expectedDelivery;
 }

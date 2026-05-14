@@ -1,8 +1,11 @@
 package br.ufes.inf.soe.queue_sine.controller;
 
+import br.ufes.inf.soe.queue_sine.dto.ClientDto;
 import br.ufes.inf.soe.queue_sine.dto.OrderItemResponse;
 import br.ufes.inf.soe.queue_sine.dto.OrderResponse;
 import br.ufes.inf.soe.queue_sine.dto.ProductResponse;
+import br.ufes.inf.soe.queue_sine.dto.StoreOrderResponse;
+import br.ufes.inf.soe.queue_sine.entity.Client;
 import br.ufes.inf.soe.queue_sine.entity.OrderEntity;
 import br.ufes.inf.soe.queue_sine.entity.OrderItem;
 import br.ufes.inf.soe.queue_sine.entity.Product;
@@ -40,9 +43,9 @@ public class OrderController {
     }
 
     @GetMapping
-    public ResponseEntity<List<OrderResponse>> listAllOrders() {
-        List<OrderResponse> orders = orderRepository.findAll().stream()
-                .map(this::toResponse)
+    public ResponseEntity<List<StoreOrderResponse>> listAllOrders() {
+        List<StoreOrderResponse> orders = orderRepository.findAll().stream()
+                .map(this::toStoreResponse)
                 .collect(Collectors.toList());
         return ResponseEntity.ok(orders);
     }
@@ -56,6 +59,19 @@ public class OrderController {
     }
 
     private OrderResponse toResponse(OrderEntity order) {
+        Integer clientId = order.getClient() != null ? order.getClient().getId() : null;
+        String status = order.getStatus() != null ? order.getStatus().getName() : null;
+        return new OrderResponse(order.getId(), clientId, buildItemResponses(order), order.getCreatedAt(), order.getExpectedDelivery(), status);
+    }
+
+    private StoreOrderResponse toStoreResponse(OrderEntity order) {
+        Client client = order.getClient();
+        ClientDto clientDto = client != null ? new ClientDto(client.getId(), client.getName()) : null;
+        String status = order.getStatus() != null ? order.getStatus().getName() : null;
+        return new StoreOrderResponse(order.getId(), clientDto, buildItemResponses(order), order.getCreatedAt(), order.getExpectedDelivery(), status);
+    }
+
+    private List<OrderItemResponse> buildItemResponses(OrderEntity order) {
         List<OrderItem> items = orderItemRepository.findByOrder_Id(order.getId());
 
         Set<Integer> productIds = new HashSet<>();
@@ -76,11 +92,7 @@ public class OrderController {
             }
             itemResponses.add(new OrderItemResponse(toProductResponse(product), item.getQuantity()));
         }
-
-        Integer clientId = order.getClient() != null ? order.getClient().getId() : null;
-        String status = order.getStatus() != null ? order.getStatus().getName() : null;
-
-        return new OrderResponse(order.getId(), clientId, itemResponses, order.getCreatedAt(), status);
+        return itemResponses;
     }
 
     private ProductResponse toProductResponse(Product product) {

@@ -2,6 +2,8 @@ package br.ufes.inf.soe.queue_sine.kafka;
 
 import br.ufes.inf.soe.queue_sine.dto.CreateOrderRequest;
 import br.ufes.inf.soe.queue_sine.dto.OrderItemInput;
+import br.ufes.inf.soe.queue_sine.dto.OrderStatus;
+import br.ufes.inf.soe.queue_sine.dto.OrderStatusEvent;
 import br.ufes.inf.soe.queue_sine.entity.Client;
 import br.ufes.inf.soe.queue_sine.entity.OrderEntity;
 import br.ufes.inf.soe.queue_sine.entity.OrderItem;
@@ -13,6 +15,7 @@ import br.ufes.inf.soe.queue_sine.repository.OrderStatusRepository;
 import br.ufes.inf.soe.queue_sine.repository.ProductRepository;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -32,7 +35,7 @@ public class KafkaListeners {
 
     private final Logger logger = LoggerFactory.getLogger(KafkaListeners.class);
 
-    private final ObjectMapper objectMapper = new ObjectMapper();
+    private final ObjectMapper objectMapper = new ObjectMapper().registerModule(new JavaTimeModule());
     private final OrderRepository orderRepository;
     private final OrderItemRepository orderItemRepository;
     private final ClientRepository clientRepository;
@@ -70,9 +73,74 @@ public class KafkaListeners {
     }
 
     @KafkaListener(topics = "order-status-events", groupId = "queue-sine-group")
+    @Transactional
     public void handleOrderStatusEvent(ConsumerRecord<String, String> record) {
         logger.info("Received event topic={} key={} payload={}", record.topic(), record.key(), record.value());
-        // TODO: handle order status event
+
+        OrderStatusEvent event;
+        try {
+            event = objectMapper.readValue(record.value(), OrderStatusEvent.class);
+        } catch (JsonProcessingException e) {
+            logger.warn("Invalid JSON for order-status topic, skipping: {}", e.getOriginalMessage());
+            return;
+        }
+
+        if (event.getOrderId() == null || event.getOrderId().isBlank()) {
+            logger.warn("Skipping order-status event: orderId is required");
+            return;
+        }
+        if (event.getStatus() == null) {
+            logger.warn("Skipping order-status event: status is required");
+            return;
+        }
+
+        int orderId;
+        try {
+            orderId = Integer.parseInt(event.getOrderId().trim());
+        } catch (NumberFormatException e) {
+            logger.warn("Skipping order-status event: invalid orderId {}", event.getOrderId());
+            return;
+        }
+
+        OrderEntity order = orderRepository.findById(orderId).orElse(null);
+        if (order == null) {
+            logger.warn("Skipping order-status event: order not found id={}", orderId);
+            return;
+        }
+
+        String current = order.getStatus() != null ? order.getStatus().getName() : null;
+        if (current == null) {
+            logger.warn("Skipping order-status event: order id={} has no status", orderId);
+            return;
+        }
+
+        String target = toPersistedStatusName(event.getStatus());
+        if (current.equals(target)) {
+            logger.info("Order id={} already in status {}", orderId, target);
+            return;
+        }
+        if (!isAllowedStatusTransition(current, target)) {
+            logger.warn("Invalid status transition orderId={} from={} to={}", orderId, current, target);
+            return;
+        }
+
+        if ("OUT_FOR_DELIVERY".equals(target) && event.getExpectedDelivery() == null) {
+            logger.warn("Skipping order-status event: expectedDelivery is required when transitioning to OUT_FOR_DELIVERY orderId={}", orderId);
+            return;
+        }
+
+        OrderStatusEntity next = orderStatusRepository.findByName(target).orElse(null);
+        if (next == null) {
+            logger.error("order_status '{}' is not configured", target);
+            return;
+        }
+
+        order.setStatus(next);
+        if ("OUT_FOR_DELIVERY".equals(target)) {
+            order.setExpectedDelivery(Instant.now().plus(event.getExpectedDelivery()));
+        }
+        orderRepository.save(order);
+        logger.info("Updated order id={} status {} -> {}", orderId, current, target);
     }
 
     @KafkaListener(topics = "order", groupId = "queue-sine-group")
@@ -138,5 +206,21 @@ public class KafkaListeners {
         orderItemRepository.saveAll(rows);
 
         logger.info("Persisted order id={} clientId={}", saved.getId(), payload.getClientId());
+    }
+
+    /** {@link OrderStatus} names match {@code order_status.name} values from Flyway (except {@code CREATED}). */
+    private static String toPersistedStatusName(OrderStatus status) {
+        return status.name();
+    }
+
+    private static boolean isAllowedStatusTransition(String current, String target) {
+        return switch (current) {
+            case "CREATED" -> "ACCEPTED".equals(target) || "CANCELLED".equals(target);
+            case "ACCEPTED" -> "PREPARING".equals(target);
+            case "PREPARING" -> "OUT_FOR_DELIVERY".equals(target);
+            case "OUT_FOR_DELIVERY" -> "DELIVERED".equals(target);
+            case "CANCELLED" -> false;
+            default -> false;
+        };
     }
 }

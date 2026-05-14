@@ -1,5 +1,6 @@
 package br.ufes.inf.soe.queue_sine.dto;
 
+import java.time.Duration;
 import java.time.Instant;
 
 import lombok.Getter;
@@ -15,6 +16,7 @@ public class OrderStatusEvent {
     private String storeId;
     private String category;
     private OrderStatus status;
+    private Duration expectedDelivery;
     private Instant occurredAt;
 
     public OrderStatusEvent() {
