@@ -101,7 +101,8 @@ public class OrderController {
                 product.getName(),
                 product.getDescription(),
                 product.getPrice(),
-                product.getPhotoUrl()
+                product.getPhotoUrl(),
+                1.0f
         );
     }
 }

@@ -1,24 +1,23 @@
 package br.ufes.inf.soe.queue_sine.dto;
 
-import java.time.Instant;
-
+import lombok.AllArgsConstructor;
 import lombok.Getter;
+import lombok.NoArgsConstructor;
 import lombok.Setter;
+
+import java.time.Instant;
 
 @Setter
 @Getter
+@NoArgsConstructor
+@AllArgsConstructor
 public class CartEvent {
 
     private String eventId;
-    private String userId;
-    private String cartId;
-    private String itemId;
-    private String category;
     private CartAction action;
-    private int quantity;
+    private Integer currentAmount;
+    private Integer productId;
+    private Integer clientId;
     private Instant occurredAt;
-
-    public CartEvent() {
-    }
 
 }

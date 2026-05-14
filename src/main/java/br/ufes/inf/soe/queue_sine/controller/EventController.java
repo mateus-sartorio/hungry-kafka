@@ -30,14 +30,8 @@ public class EventController {
 
     @PostMapping("/item-view")
     public ResponseEntity<Map<String, String>> itemView(@RequestBody ItemViewEvent event) {
-        if (event.getEventId() == null) {
-            event.setEventId(UUID.randomUUID().toString());
-        }
-        if (event.getObservedAt() == null) {
-            event.setObservedAt(Instant.now());
-        }
         eventProducer.sendItemView(event);
-        return accepted(TopicNames.ITEM_VIEW_EVENTS, event.getEventId());
+        return accepted(TopicNames.ITEM_VIEW_EVENTS, String.valueOf(event.getClientId()));
     }
 
     @PostMapping("/click-stream")
