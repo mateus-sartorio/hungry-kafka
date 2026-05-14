@@ -4,7 +4,17 @@ import br.ufes.inf.soe.queue_sine.dto.CreateOrderRequest;
 import br.ufes.inf.soe.queue_sine.dto.OrderItemInput;
 import br.ufes.inf.soe.queue_sine.dto.OrderStatus;
 import br.ufes.inf.soe.queue_sine.dto.OrderStatusEvent;
+import br.ufes.inf.soe.queue_sine.dto.OrderResponse;
+import br.ufes.inf.soe.queue_sine.dto.StoreOrderResponse;
+import br.ufes.inf.soe.queue_sine.dto.ClientDto;
+import br.ufes.inf.soe.queue_sine.dto.OrderItemResponse;
+import br.ufes.inf.soe.queue_sine.dto.ProductResponse;
 import br.ufes.inf.soe.queue_sine.entity.Client;
+import br.ufes.inf.soe.queue_sine.entity.Product;
+import org.springframework.kafka.core.KafkaTemplate;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.Map;
 import br.ufes.inf.soe.queue_sine.entity.OrderEntity;
 import br.ufes.inf.soe.queue_sine.entity.OrderItem;
 import br.ufes.inf.soe.queue_sine.entity.OrderStatusEntity;
@@ -41,17 +51,20 @@ public class KafkaListeners {
     private final ClientRepository clientRepository;
     private final OrderStatusRepository orderStatusRepository;
     private final ProductRepository productRepository;
+    private final KafkaTemplate<String, Object> kafkaTemplate;
 
     public KafkaListeners(OrderRepository orderRepository,
                           OrderItemRepository orderItemRepository,
                           ClientRepository clientRepository,
                           OrderStatusRepository orderStatusRepository,
-                          ProductRepository productRepository) {
+                          ProductRepository productRepository,
+                          KafkaTemplate<String, Object> kafkaTemplate) {
         this.orderRepository = orderRepository;
         this.orderItemRepository = orderItemRepository;
         this.clientRepository = clientRepository;
         this.orderStatusRepository = orderStatusRepository;
         this.productRepository = productRepository;
+        this.kafkaTemplate = kafkaTemplate;
     }
 
     @KafkaListener(topics = "item-view-events", groupId = "queue-sine-group")
@@ -141,6 +154,17 @@ public class KafkaListeners {
         }
         orderRepository.save(order);
         logger.info("Updated order id={} status {} -> {}", orderId, current, target);
+
+        StoreOrderResponse storeOrderResponse = toStoreResponse(order);
+        OrderResponse orderResponse = toResponse(order);
+
+        kafkaTemplate.send("order-status-changed", String.valueOf(orderId), storeOrderResponse);
+
+        Integer clientId = order.getClient() != null ? order.getClient().getId() : null;
+        if (clientId != null) {
+            String clientTopic = "order-status-changed-" + clientId;
+            kafkaTemplate.send(clientTopic, String.valueOf(orderId), orderResponse);
+        }
     }
 
     @KafkaListener(topics = "order", groupId = "queue-sine-group")
@@ -222,5 +246,52 @@ public class KafkaListeners {
             case "CANCELLED" -> false;
             default -> false;
         };
+    }
+
+    private OrderResponse toResponse(OrderEntity order) {
+        Integer clientId = order.getClient() != null ? order.getClient().getId() : null;
+        String status = order.getStatus() != null ? order.getStatus().getName() : null;
+        return new OrderResponse(order.getId(), clientId, buildItemResponses(order), order.getCreatedAt(), order.getExpectedDelivery(), status);
+    }
+
+    private StoreOrderResponse toStoreResponse(OrderEntity order) {
+        Client client = order.getClient();
+        ClientDto clientDto = client != null ? new ClientDto(client.getId(), client.getName()) : null;
+        String status = order.getStatus() != null ? order.getStatus().getName() : null;
+        return new StoreOrderResponse(order.getId(), clientDto, buildItemResponses(order), order.getCreatedAt(), order.getExpectedDelivery(), status);
+    }
+
+    private List<OrderItemResponse> buildItemResponses(OrderEntity order) {
+        List<OrderItem> items = orderItemRepository.findByOrder_Id(order.getId());
+
+        Set<Integer> productIds = new HashSet<>();
+        for (OrderItem item : items) {
+            productIds.add(item.getProductId());
+        }
+
+        Map<Integer, Product> productsById = new HashMap<>();
+        for (Product product : productRepository.findAllById(productIds)) {
+            productsById.put(product.getId(), product);
+        }
+
+        List<OrderItemResponse> itemResponses = new ArrayList<>();
+        for (OrderItem item : items) {
+            Product product = productsById.get(item.getProductId());
+            if (product == null) {
+                continue;
+            }
+            itemResponses.add(new OrderItemResponse(toProductResponse(product), item.getQuantity()));
+        }
+        return itemResponses;
+    }
+
+    private ProductResponse toProductResponse(Product product) {
+        return new ProductResponse(
+                product.getId(),
+                product.getName(),
+                product.getDescription(),
+                product.getPrice(),
+                product.getPhotoUrl()
+        );
     }
 }
