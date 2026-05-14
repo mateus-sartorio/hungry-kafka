@@ -1,42 +1,53 @@
 package br.ufes.inf.soe.queue_sine.kafka;
 
-import br.ufes.inf.soe.queue_sine.dto.CreateOrderRequest;
-import br.ufes.inf.soe.queue_sine.dto.OrderItemInput;
-import br.ufes.inf.soe.queue_sine.dto.OrderStatus;
-import br.ufes.inf.soe.queue_sine.dto.OrderStatusEvent;
-import br.ufes.inf.soe.queue_sine.dto.OrderResponse;
-import br.ufes.inf.soe.queue_sine.dto.StoreOrderResponse;
-import br.ufes.inf.soe.queue_sine.dto.ClientDto;
-import br.ufes.inf.soe.queue_sine.dto.OrderItemResponse;
-import br.ufes.inf.soe.queue_sine.dto.ProductResponse;
-import br.ufes.inf.soe.queue_sine.entity.Client;
-import br.ufes.inf.soe.queue_sine.entity.Product;
-import org.springframework.kafka.core.KafkaTemplate;
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.HashSet;
+import java.util.List;
 import java.util.Map;
+import java.util.Set;
+
+import org.apache.kafka.clients.consumer.ConsumerRecord;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.kafka.annotation.KafkaListener;
+import org.springframework.kafka.core.KafkaTemplate;
+import org.springframework.stereotype.Component;
+import org.springframework.transaction.annotation.Transactional;
+
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
+
+import br.ufes.inf.soe.queue_sine.dto.CartEvent;
+import br.ufes.inf.soe.queue_sine.dto.ClientDto;
+import br.ufes.inf.soe.queue_sine.dto.CreateOrderRequest;
+import br.ufes.inf.soe.queue_sine.dto.ItemViewEvent;
+import br.ufes.inf.soe.queue_sine.dto.OrderItemInput;
+import br.ufes.inf.soe.queue_sine.dto.OrderItemResponse;
+import br.ufes.inf.soe.queue_sine.dto.OrderResponse;
+import br.ufes.inf.soe.queue_sine.dto.OrderStatus;
+import br.ufes.inf.soe.queue_sine.dto.OrderStatusEvent;
+import br.ufes.inf.soe.queue_sine.dto.ProductResponse;
+import br.ufes.inf.soe.queue_sine.dto.StoreOrderResponse;
+import br.ufes.inf.soe.queue_sine.entity.Client;
+import br.ufes.inf.soe.queue_sine.entity.ClientCategoryPreference;
+import br.ufes.inf.soe.queue_sine.entity.ClientCategoryPreferenceId;
+import br.ufes.inf.soe.queue_sine.entity.ClientProductPreference;
+import br.ufes.inf.soe.queue_sine.entity.ClientProductPreferenceId;
 import br.ufes.inf.soe.queue_sine.entity.OrderEntity;
 import br.ufes.inf.soe.queue_sine.entity.OrderItem;
 import br.ufes.inf.soe.queue_sine.entity.OrderStatusEntity;
+import br.ufes.inf.soe.queue_sine.entity.Product;
+import br.ufes.inf.soe.queue_sine.repository.ClientCategoryPreferenceRepository;
+import br.ufes.inf.soe.queue_sine.repository.ClientProductPreferenceRepository;
 import br.ufes.inf.soe.queue_sine.repository.ClientRepository;
 import br.ufes.inf.soe.queue_sine.repository.OrderItemRepository;
 import br.ufes.inf.soe.queue_sine.repository.OrderRepository;
 import br.ufes.inf.soe.queue_sine.repository.OrderStatusRepository;
 import br.ufes.inf.soe.queue_sine.repository.ProductRepository;
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
-import org.apache.kafka.clients.consumer.ConsumerRecord;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-import org.springframework.kafka.annotation.KafkaListener;
-import org.springframework.stereotype.Component;
-import org.springframework.transaction.annotation.Transactional;
-
-import java.time.Instant;
-import java.util.HashSet;
-import java.util.List;
-import java.util.Set;
 
 @Component
 public class KafkaListeners {
@@ -45,12 +56,23 @@ public class KafkaListeners {
 
     private final Logger logger = LoggerFactory.getLogger(KafkaListeners.class);
 
+    @Value("${app.preference.cart.multiplier:1.05}")
+    private Float cartPreferenceMultiplier;
+
+    @Value("${app.preference.itemview.multiplier:1.01}")
+    private Float itemviewPreferenceMultiplier;
+
+    @Value("${app.preference.order.multiplier:1.01}")
+    private Float orderPreferenceMultiplier;
+
     private final ObjectMapper objectMapper = new ObjectMapper().registerModule(new JavaTimeModule());
     private final OrderRepository orderRepository;
     private final OrderItemRepository orderItemRepository;
     private final ClientRepository clientRepository;
     private final OrderStatusRepository orderStatusRepository;
     private final ProductRepository productRepository;
+    private final ClientCategoryPreferenceRepository clientCategoryPreferenceRepository;
+    private final ClientProductPreferenceRepository clientProductPreferenceRepository;
     private final KafkaTemplate<String, Object> kafkaTemplate;
 
     public KafkaListeners(OrderRepository orderRepository,
@@ -58,25 +80,217 @@ public class KafkaListeners {
             ClientRepository clientRepository,
             OrderStatusRepository orderStatusRepository,
             ProductRepository productRepository,
+            ClientCategoryPreferenceRepository clientCategoryPreferenceRepository,
+            ClientProductPreferenceRepository clientProductPreferenceRepository,
             KafkaTemplate<String, Object> kafkaTemplate) {
         this.orderRepository = orderRepository;
         this.orderItemRepository = orderItemRepository;
         this.clientRepository = clientRepository;
         this.orderStatusRepository = orderStatusRepository;
         this.productRepository = productRepository;
+        this.clientCategoryPreferenceRepository = clientCategoryPreferenceRepository;
+        this.clientProductPreferenceRepository = clientProductPreferenceRepository;
         this.kafkaTemplate = kafkaTemplate;
     }
 
     @KafkaListener(topics = "item-view-events", groupId = "queue-sine-group")
+    @Transactional
     public void handleItemView(ConsumerRecord<String, String> record) {
         logger.info("Received event topic={} key={} payload={}", record.topic(), record.key(), record.value());
-        // TODO: handle telemetry item view event
+
+        ItemViewEvent event;
+        try {
+            event = objectMapper.readValue(record.value(), ItemViewEvent.class);
+        } catch (JsonProcessingException e) {
+            logger.warn("Invalid JSON for item-view-events topic, skipping: {}", e.getOriginalMessage());
+            return;
+        }
+
+        // Validate required fields
+        if (event.getProductId() == null) {
+            logger.warn("Skipping item-view event: productId is required");
+            return;
+        }
+        if (event.getClientId() == null) {
+            logger.warn("Skipping item-view event: clientId is required");
+            return;
+        }
+
+        // Verify client exists
+        Client client = clientRepository.findById(event.getClientId()).orElse(null);
+        if (client == null) {
+            logger.warn("Skipping item-view event: client not found id={}", event.getClientId());
+            return;
+        }
+
+        // Verify product exists and get its category
+        Product product = productRepository.findById(event.getProductId()).orElse(null);
+        if (product == null) {
+            logger.warn("Skipping item-view event: product not found id={}", event.getProductId());
+            return;
+        }
+
+        Integer categoryId = product.getCategory() != null ? product.getCategory().getId() : null;
+        if (categoryId == null) {
+            logger.warn("Skipping item-view event: product id={} has no category", event.getProductId());
+            return;
+        }
+
+        // Update or create client category preference
+        ClientCategoryPreferenceId categoryPrefId = new ClientCategoryPreferenceId(event.getClientId(), categoryId);
+        ClientCategoryPreference categoryPref = clientCategoryPreferenceRepository.findById(categoryPrefId)
+                .orElse(null);
+
+        if (categoryPref == null) {
+            // Create new category preference with initial multiplier value
+            categoryPref = new ClientCategoryPreference();
+            categoryPref.setId(categoryPrefId);
+            categoryPref.setClient(client);
+            categoryPref.setValue(itemviewPreferenceMultiplier);
+            categoryPref.setUpdatedAt(Instant.now());
+            clientCategoryPreferenceRepository.save(categoryPref);
+            logger.info("Created category preference clientId={} categoryId={} value={}", event.getClientId(),
+                    categoryId, itemviewPreferenceMultiplier);
+        } else {
+            // Update existing category preference by preference multiplier
+            Float newValue = categoryPref.getValue() * itemviewPreferenceMultiplier;
+            categoryPref.setValue(newValue);
+            categoryPref.setUpdatedAt(Instant.now());
+            clientCategoryPreferenceRepository.save(categoryPref);
+            logger.info("Updated category preference clientId={} categoryId={} newValue={}", event.getClientId(),
+                    categoryId, newValue);
+        }
+
+        // Update or create client product preference
+        ClientProductPreferenceId productPrefId = new ClientProductPreferenceId(event.getClientId(),
+                event.getProductId());
+        ClientProductPreference productPref = clientProductPreferenceRepository.findById(productPrefId)
+                .orElse(null);
+
+        if (productPref == null) {
+            // Create new product preference with initial multiplier value
+            productPref = new ClientProductPreference();
+            productPref.setId(productPrefId);
+            productPref.setClient(client);
+            productPref.setValue(itemviewPreferenceMultiplier);
+            productPref.setUpdatedAt(Instant.now());
+            clientProductPreferenceRepository.save(productPref);
+            logger.info("Created product preference clientId={} productId={} value={}", event.getClientId(),
+                    event.getProductId(), itemviewPreferenceMultiplier);
+        } else {
+            // Update existing product preference by preference multiplier
+            Float newValue = productPref.getValue() * itemviewPreferenceMultiplier;
+            productPref.setValue(newValue);
+            productPref.setUpdatedAt(Instant.now());
+            clientProductPreferenceRepository.save(productPref);
+            logger.info("Updated product preference clientId={} productId={} newValue={}", event.getClientId(),
+                    event.getProductId(), newValue);
+        }
     }
 
     @KafkaListener(topics = "cart-events", groupId = "queue-sine-group")
+    @Transactional
     public void handleCartEvent(ConsumerRecord<String, String> record) {
         logger.info("Received event topic={} key={} payload={}", record.topic(), record.key(), record.value());
-        // TODO: handle cart event
+
+        CartEvent event;
+        try {
+            event = objectMapper.readValue(record.value(), CartEvent.class);
+        } catch (JsonProcessingException e) {
+            logger.warn("Invalid JSON for cart-events topic, skipping: {}", e.getOriginalMessage());
+            return;
+        }
+
+        // Validate required fields
+        if (event.getAction() == null) {
+            logger.warn("Skipping cart event: action is required");
+            return;
+        }
+        if (event.getProductId() == null) {
+            logger.warn("Skipping cart event: productId is required");
+            return;
+        }
+        if (event.getClientId() == null) {
+            logger.warn("Skipping cart event: clientId is required");
+            return;
+        }
+
+        // Only process ADDED events
+        if (!event.getAction().name().equals("ADDED")) {
+            logger.info("Skipping cart event: only ADDED events are processed, received {}", event.getAction());
+            return;
+        }
+
+        // Verify client exists
+        Client client = clientRepository.findById(event.getClientId()).orElse(null);
+        if (client == null) {
+            logger.warn("Skipping cart event: client not found id={}", event.getClientId());
+            return;
+        }
+
+        // Verify product exists and get its category
+        Product product = productRepository.findById(event.getProductId()).orElse(null);
+        if (product == null) {
+            logger.warn("Skipping cart event: product not found id={}", event.getProductId());
+            return;
+        }
+
+        Integer categoryId = product.getCategory() != null ? product.getCategory().getId() : null;
+        if (categoryId == null) {
+            logger.warn("Skipping cart event: product id={} has no category", event.getProductId());
+            return;
+        }
+
+        // Update or create client category preference
+        ClientCategoryPreferenceId categoryPrefId = new ClientCategoryPreferenceId(event.getClientId(), categoryId);
+        ClientCategoryPreference categoryPref = clientCategoryPreferenceRepository.findById(categoryPrefId)
+                .orElse(null);
+
+        if (categoryPref == null) {
+            // Create new category preference with initial cart multiplier value
+            categoryPref = new ClientCategoryPreference();
+            categoryPref.setId(categoryPrefId);
+            categoryPref.setClient(client);
+            categoryPref.setValue(cartPreferenceMultiplier);
+            categoryPref.setUpdatedAt(Instant.now());
+            clientCategoryPreferenceRepository.save(categoryPref);
+            logger.info("Created category preference clientId={} categoryId={} value={}", event.getClientId(),
+                    categoryId, cartPreferenceMultiplier);
+        } else {
+            // Update existing category preference by cart multiplier
+            Float newValue = categoryPref.getValue() * cartPreferenceMultiplier;
+            categoryPref.setValue(newValue);
+            categoryPref.setUpdatedAt(Instant.now());
+            clientCategoryPreferenceRepository.save(categoryPref);
+            logger.info("Updated category preference clientId={} categoryId={} newValue={}", event.getClientId(),
+                    categoryId, newValue);
+        }
+
+        // Update or create client product preference
+        ClientProductPreferenceId productPrefId = new ClientProductPreferenceId(event.getClientId(),
+                event.getProductId());
+        ClientProductPreference productPref = clientProductPreferenceRepository.findById(productPrefId)
+                .orElse(null);
+
+        if (productPref == null) {
+            // Create new product preference with initial cart multiplier value
+            productPref = new ClientProductPreference();
+            productPref.setId(productPrefId);
+            productPref.setClient(client);
+            productPref.setValue(cartPreferenceMultiplier);
+            productPref.setUpdatedAt(Instant.now());
+            clientProductPreferenceRepository.save(productPref);
+            logger.info("Created product preference clientId={} productId={} value={}", event.getClientId(),
+                    event.getProductId(), cartPreferenceMultiplier);
+        } else {
+            // Update existing product preference by cart multiplier
+            Float newValue = productPref.getValue() * cartPreferenceMultiplier;
+            productPref.setValue(newValue);
+            productPref.setUpdatedAt(Instant.now());
+            clientProductPreferenceRepository.save(productPref);
+            logger.info("Updated product preference clientId={} productId={} newValue={}", event.getClientId(),
+                    event.getProductId(), newValue);
+        }
     }
 
     @KafkaListener(topics = "order-status-events", groupId = "queue-sine-group")
@@ -226,6 +440,68 @@ public class KafkaListeners {
                 .toList();
         orderItemRepository.saveAll(rows);
 
+        // Update preferences for each product in the order
+        for (OrderItemInput item : payload.getItems()) {
+            Product product = productRepository.findById(item.getProductId()).orElse(null);
+            if (product == null || product.getCategory() == null) {
+                continue;
+            }
+
+            Integer categoryId = product.getCategory().getId();
+
+            // Update or create client category preference
+            ClientCategoryPreferenceId categoryPrefId = new ClientCategoryPreferenceId(payload.getClientId(),
+                    categoryId);
+            ClientCategoryPreference categoryPref = clientCategoryPreferenceRepository.findById(categoryPrefId)
+                    .orElse(null);
+
+            if (categoryPref == null) {
+                // Create new category preference with initial order multiplier value
+                categoryPref = new ClientCategoryPreference();
+                categoryPref.setId(categoryPrefId);
+                categoryPref.setClient(client);
+                categoryPref.setValue(orderPreferenceMultiplier);
+                categoryPref.setUpdatedAt(Instant.now());
+                clientCategoryPreferenceRepository.save(categoryPref);
+                logger.info("Created category preference clientId={} categoryId={} value={}",
+                        payload.getClientId(), categoryId, orderPreferenceMultiplier);
+            } else {
+                // Update existing category preference by order multiplier
+                Float newValue = categoryPref.getValue() * orderPreferenceMultiplier;
+                categoryPref.setValue(newValue);
+                categoryPref.setUpdatedAt(Instant.now());
+                clientCategoryPreferenceRepository.save(categoryPref);
+                logger.info("Updated category preference clientId={} categoryId={} newValue={}",
+                        payload.getClientId(), categoryId, newValue);
+            }
+
+            // Update or create client product preference
+            ClientProductPreferenceId productPrefId = new ClientProductPreferenceId(payload.getClientId(),
+                    item.getProductId());
+            ClientProductPreference productPref = clientProductPreferenceRepository.findById(productPrefId)
+                    .orElse(null);
+
+            if (productPref == null) {
+                // Create new product preference with initial order multiplier value
+                productPref = new ClientProductPreference();
+                productPref.setId(productPrefId);
+                productPref.setClient(client);
+                productPref.setValue(orderPreferenceMultiplier);
+                productPref.setUpdatedAt(Instant.now());
+                clientProductPreferenceRepository.save(productPref);
+                logger.info("Created product preference clientId={} productId={} value={}",
+                        payload.getClientId(), item.getProductId(), orderPreferenceMultiplier);
+            } else {
+                // Update existing product preference by order multiplier
+                Float newValue = productPref.getValue() * orderPreferenceMultiplier;
+                productPref.setValue(newValue);
+                productPref.setUpdatedAt(Instant.now());
+                clientProductPreferenceRepository.save(productPref);
+                logger.info("Updated product preference clientId={} productId={} newValue={}",
+                        payload.getClientId(), item.getProductId(), newValue);
+            }
+        }
+
         logger.info("Persisted order id={} clientId={}", saved.getId(), payload.getClientId());
     }
 
@@ -293,6 +569,7 @@ public class KafkaListeners {
                 product.getName(),
                 product.getDescription(),
                 product.getPrice(),
-                product.getPhotoUrl());
+                product.getPhotoUrl(),
+                1.0f);
     }
 }

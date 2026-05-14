@@ -1,7 +1,5 @@
 package br.ufes.inf.soe.queue_sine.dto;
 
-import java.time.Instant;
-
 import lombok.Getter;
 import lombok.Setter;
 
@@ -9,12 +7,8 @@ import lombok.Setter;
 @Getter
 public class ItemViewEvent {
 
-    private String eventId;
-    private String userId;
-    private String itemId;
-    private String category;
-    private long viewDurationSeconds;
-    private Instant observedAt;
+    private Integer productId;
+    private Integer clientId;
 
     public ItemViewEvent() {
     }

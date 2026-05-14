@@ -4,6 +4,11 @@ import jakarta.persistence.*;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
+import lombok.ToString;
+import lombok.EqualsAndHashCode;
+
+import java.util.HashMap;
+import java.util.Map;
 
 @Entity
 @Table(name = "client")
@@ -17,4 +22,16 @@ public class Client {
 
     @Column(nullable = false)
     private String name;
+
+    @OneToMany(mappedBy = "client", cascade = CascadeType.ALL, orphanRemoval = true)
+    @MapKey(name = "id.productId")
+    @ToString.Exclude
+    @EqualsAndHashCode.Exclude
+    private Map<Integer, ClientProductPreference> productPreferences = new HashMap<>();
+
+    @OneToMany(mappedBy = "client", cascade = CascadeType.ALL, orphanRemoval = true)
+    @MapKey(name = "id.categoryId")
+    @ToString.Exclude
+    @EqualsAndHashCode.Exclude
+    private Map<Integer, ClientCategoryPreference> categoryPreferences = new HashMap<>();
 }

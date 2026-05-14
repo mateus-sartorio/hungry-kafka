@@ -22,7 +22,8 @@ public class EventProducer {
     }
 
     public void sendItemView(ItemViewEvent event) {
-        send(TopicNames.ITEM_VIEW_EVENTS, event.getUserId(), event);
+        String key = event.getClientId() != null ? String.valueOf(event.getClientId()) : "unknown";
+        send(TopicNames.ITEM_VIEW_EVENTS, key, event);
     }
 
     public void sendClickStream(ClickStreamEvent event) {
@@ -30,7 +31,8 @@ public class EventProducer {
     }
 
     public void sendCart(CartEvent event) {
-        send(TopicNames.CART_EVENTS, event.getUserId(), event);
+        String key = event.getClientId() != null ? String.valueOf(event.getClientId()) : "unknown";
+        send(TopicNames.CART_EVENTS, key, event);
     }
 
     public void sendOrderStatus(OrderStatusEvent event) {
