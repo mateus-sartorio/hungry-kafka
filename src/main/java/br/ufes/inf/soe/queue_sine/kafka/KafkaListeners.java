@@ -54,11 +54,11 @@ public class KafkaListeners {
     private final KafkaTemplate<String, Object> kafkaTemplate;
 
     public KafkaListeners(OrderRepository orderRepository,
-                          OrderItemRepository orderItemRepository,
-                          ClientRepository clientRepository,
-                          OrderStatusRepository orderStatusRepository,
-                          ProductRepository productRepository,
-                          KafkaTemplate<String, Object> kafkaTemplate) {
+            OrderItemRepository orderItemRepository,
+            ClientRepository clientRepository,
+            OrderStatusRepository orderStatusRepository,
+            ProductRepository productRepository,
+            KafkaTemplate<String, Object> kafkaTemplate) {
         this.orderRepository = orderRepository;
         this.orderItemRepository = orderItemRepository;
         this.clientRepository = clientRepository;
@@ -71,12 +71,6 @@ public class KafkaListeners {
     public void handleItemView(ConsumerRecord<String, String> record) {
         logger.info("Received event topic={} key={} payload={}", record.topic(), record.key(), record.value());
         // TODO: handle telemetry item view event
-    }
-
-    @KafkaListener(topics = "click-stream-events", groupId = "queue-sine-group")
-    public void handleClickStream(ConsumerRecord<String, String> record) {
-        logger.info("Received event topic={} key={} payload={}", record.topic(), record.key(), record.value());
-        // TODO: handle click stream event
     }
 
     @KafkaListener(topics = "cart-events", groupId = "queue-sine-group")
@@ -138,7 +132,9 @@ public class KafkaListeners {
         }
 
         if ("OUT_FOR_DELIVERY".equals(target) && event.getExpectedDelivery() == null) {
-            logger.warn("Skipping order-status event: expectedDelivery is required when transitioning to OUT_FOR_DELIVERY orderId={}", orderId);
+            logger.warn(
+                    "Skipping order-status event: expectedDelivery is required when transitioning to OUT_FOR_DELIVERY orderId={}",
+                    orderId);
             return;
         }
 
@@ -208,7 +204,8 @@ public class KafkaListeners {
             productIds.add(line.getProductId());
         }
         if (productRepository.findAllById(productIds).size() != productIds.size()) {
-            logger.warn("Skipping order event: one or more products do not exist for clientId={}", payload.getClientId());
+            logger.warn("Skipping order event: one or more products do not exist for clientId={}",
+                    payload.getClientId());
             return;
         }
 
@@ -232,7 +229,10 @@ public class KafkaListeners {
         logger.info("Persisted order id={} clientId={}", saved.getId(), payload.getClientId());
     }
 
-    /** {@link OrderStatus} names match {@code order_status.name} values from Flyway (except {@code CREATED}). */
+    /**
+     * {@link OrderStatus} names match {@code order_status.name} values from Flyway
+     * (except {@code CREATED}).
+     */
     private static String toPersistedStatusName(OrderStatus status) {
         return status.name();
     }
@@ -251,14 +251,16 @@ public class KafkaListeners {
     private OrderResponse toResponse(OrderEntity order) {
         Integer clientId = order.getClient() != null ? order.getClient().getId() : null;
         String status = order.getStatus() != null ? order.getStatus().getName() : null;
-        return new OrderResponse(order.getId(), clientId, buildItemResponses(order), order.getCreatedAt(), order.getExpectedDelivery(), status);
+        return new OrderResponse(order.getId(), clientId, buildItemResponses(order), order.getCreatedAt(),
+                order.getExpectedDelivery(), status);
     }
 
     private StoreOrderResponse toStoreResponse(OrderEntity order) {
         Client client = order.getClient();
         ClientDto clientDto = client != null ? new ClientDto(client.getId(), client.getName()) : null;
         String status = order.getStatus() != null ? order.getStatus().getName() : null;
-        return new StoreOrderResponse(order.getId(), clientDto, buildItemResponses(order), order.getCreatedAt(), order.getExpectedDelivery(), status);
+        return new StoreOrderResponse(order.getId(), clientDto, buildItemResponses(order), order.getCreatedAt(),
+                order.getExpectedDelivery(), status);
     }
 
     private List<OrderItemResponse> buildItemResponses(OrderEntity order) {
@@ -291,7 +293,6 @@ public class KafkaListeners {
                 product.getName(),
                 product.getDescription(),
                 product.getPrice(),
-                product.getPhotoUrl()
-        );
+                product.getPhotoUrl());
     }
 }
