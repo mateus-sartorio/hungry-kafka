@@ -54,6 +54,34 @@ public class KafkaListeners {
 
     private static final String INITIAL_STATUS_NAME = "CREATED";
 
+    @Value("${app.hot-item.threshold:10}")
+    private int hotItemThreshold;
+
+    @Value("${app.hot-item.duration-seconds:15}")
+    private int hotItemDurationSeconds;
+
+    private final Map<Integer, List<Instant>> productBumps = new java.util.concurrent.ConcurrentHashMap<>();
+
+    private void recordHotItemBump(Integer productId) {
+        productBumps.compute(productId, (id, timestamps) -> {
+            if (timestamps == null) {
+                timestamps = new ArrayList<>();
+            }
+            Instant now = Instant.now();
+            timestamps.add(now);
+            
+            Instant cutoff = now.minusSeconds(hotItemDurationSeconds);
+            timestamps.removeIf(t -> t.isBefore(cutoff));
+            
+            if (timestamps.size() >= hotItemThreshold) {
+                logger.info("Product {} is HOT! Emitting event.", productId);
+                kafkaTemplate.send("hot-item-events", String.valueOf(productId), "{\"productId\": " + productId + "}");
+                timestamps.clear();
+            }
+            return timestamps;
+        });
+    }
+
     private final Logger logger = LoggerFactory.getLogger(KafkaListeners.class);
 
     @Value("${app.preference.cart.multiplier:1.05}")
@@ -186,6 +214,7 @@ public class KafkaListeners {
             logger.info("Updated product preference clientId={} productId={} newValue={}", event.getClientId(),
                     event.getProductId(), newValue);
         }
+        recordHotItemBump(event.getProductId());
     }
 
     @KafkaListener(topics = "cart-events", groupId = "queue-sine-group")
@@ -291,6 +320,7 @@ public class KafkaListeners {
             logger.info("Updated product preference clientId={} productId={} newValue={}", event.getClientId(),
                     event.getProductId(), newValue);
         }
+        recordHotItemBump(event.getProductId());
     }
 
     @KafkaListener(topics = "order-status-events", groupId = "queue-sine-group")
@@ -500,6 +530,7 @@ public class KafkaListeners {
                 logger.info("Updated product preference clientId={} productId={} newValue={}",
                         payload.getClientId(), item.getProductId(), newValue);
             }
+            recordHotItemBump(item.getProductId());
         }
 
         logger.info("Persisted order id={} clientId={}", saved.getId(), payload.getClientId());
