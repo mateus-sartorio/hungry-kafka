@@ -12,7 +12,7 @@ public class KafkaTopicConfig {
     public NewTopic itemViewEventsTopic() {
         return TopicBuilder.name(TopicNames.ITEM_VIEW_EVENTS)
                 .partitions(6)
-                .replicas(2)
+                .replicas(1)
                 .build();
     }
 
@@ -20,7 +20,7 @@ public class KafkaTopicConfig {
     public NewTopic cartEventsTopic() {
         return TopicBuilder.name(TopicNames.CART_EVENTS)
                 .partitions(6)
-                .replicas(2)
+                .replicas(1)
                 .build();
     }
 
@@ -44,7 +44,7 @@ public class KafkaTopicConfig {
     public NewTopic hotItemEventsTopic() {
         return TopicBuilder.name(TopicNames.HOT_ITEM_EVENTS)
                 .partitions(3)
-                .replicas(2)
+                .replicas(1)
                 .build();
     }
 
