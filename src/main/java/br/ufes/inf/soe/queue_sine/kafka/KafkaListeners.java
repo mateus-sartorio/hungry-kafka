@@ -20,6 +20,7 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 
+import br.ufes.inf.soe.queue_sine.config.TopicNames;
 import br.ufes.inf.soe.queue_sine.dto.CartEvent;
 import br.ufes.inf.soe.queue_sine.dto.ClientDto;
 import br.ufes.inf.soe.queue_sine.dto.CreateOrderRequest;
@@ -72,7 +73,7 @@ public class KafkaListeners {
             timestamps.removeIf(t -> t.isBefore(cutoff));
 
             if (timestamps.size() >= hotItemThreshold) {
-                kafkaTemplate.send("hot-item-events", String.valueOf(productId), "{\"productId\": " + productId + "}");
+                kafkaTemplate.send(TopicNames.HOT_ITEM_EVENTS, String.valueOf(productId), "{\"productId\": " + productId + "}");
                 timestamps.clear();
             }
             return timestamps;
@@ -116,7 +117,7 @@ public class KafkaListeners {
         this.kafkaTemplate = kafkaTemplate;
     }
 
-    @KafkaListener(topics = "item-view-events", groupId = "queue-sine-group")
+    @KafkaListener(topics = TopicNames.ITEM_VIEW_EVENTS, groupId = "queue-sine-group")
     @Transactional
     public void handleItemView(ConsumerRecord<String, String> record) {
         ItemViewEvent event;
@@ -181,7 +182,7 @@ public class KafkaListeners {
         recordHotItemHit(event.getProductId());
     }
 
-    @KafkaListener(topics = "cart-events", groupId = "queue-sine-group")
+    @KafkaListener(topics = TopicNames.CART_EVENTS, groupId = "queue-sine-group")
     @Transactional
     public void handleCartEvent(ConsumerRecord<String, String> record) {
         CartEvent event;
@@ -250,7 +251,7 @@ public class KafkaListeners {
         recordHotItemHit(event.getProductId());
     }
 
-    @KafkaListener(topics = "order-status-events", groupId = "queue-sine-group")
+    @KafkaListener(topics = TopicNames.ORDER_STATUS_EVENTS, groupId = "queue-sine-group")
     @Transactional
     public void handleOrderStatusEvent(ConsumerRecord<String, String> record) {
         OrderStatusEvent event;
@@ -303,16 +304,16 @@ public class KafkaListeners {
         StoreOrderResponse storeOrderResponse = toStoreResponse(order);
         OrderResponse orderResponse = toResponse(order);
 
-        kafkaTemplate.send("order-status-changed", String.valueOf(orderId), storeOrderResponse);
+        kafkaTemplate.send(TopicNames.ORDER_STATUS_CHANGED, String.valueOf(orderId), storeOrderResponse);
 
         Integer clientId = order.getClient() != null ? order.getClient().getId() : null;
         if (clientId != null) {
-            String clientTopic = "order-status-changed-" + clientId;
+            String clientTopic = TopicNames.ORDER_STATUS_CHANGED + "-" + clientId;
             kafkaTemplate.send(clientTopic, String.valueOf(orderId), orderResponse);
         }
     }
 
-    @KafkaListener(topics = "order", groupId = "queue-sine-group")
+    @KafkaListener(topics = TopicNames.ORDER_EVENTS, groupId = "queue-sine-group")
     @Transactional
     public void handleOrderEvent(ConsumerRecord<String, String> record) {
         CreateOrderRequest payload;
@@ -322,12 +323,6 @@ public class KafkaListeners {
             return;
         }
 
-        if (payload.getClientId() == null) {
-            return;
-        }
-        if (payload.getItems() == null || payload.getItems().isEmpty()) {
-            return;
-        }
         for (int i = 0; i < payload.getItems().size(); i++) {
             OrderItemInput line = payload.getItems().get(i);
             if (line == null || line.getProductId() == null || line.getQuantity() == null || line.getQuantity() < 1) {

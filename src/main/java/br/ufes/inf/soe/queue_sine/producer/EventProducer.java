@@ -2,7 +2,6 @@ package br.ufes.inf.soe.queue_sine.producer;
 
 import br.ufes.inf.soe.queue_sine.config.TopicNames;
 import br.ufes.inf.soe.queue_sine.dto.CartEvent;
-import br.ufes.inf.soe.queue_sine.dto.ClickStreamEvent;
 import br.ufes.inf.soe.queue_sine.dto.ItemViewEvent;
 import br.ufes.inf.soe.queue_sine.dto.CreateOrderRequest;
 import br.ufes.inf.soe.queue_sine.dto.OrderStatusEvent;
@@ -21,10 +20,6 @@ public class EventProducer {
     public void sendItemView(ItemViewEvent event) {
         String key = event.getClientId() != null ? String.valueOf(event.getClientId()) : "unknown";
         kafkaTemplate.send(TopicNames.ITEM_VIEW_EVENTS, key, event);
-    }
-
-    public void sendClickStream(ClickStreamEvent event) {
-        kafkaTemplate.send(TopicNames.CLICK_STREAM_EVENTS, event.getItemId(), event);
     }
 
     public void sendCart(CartEvent event) {
