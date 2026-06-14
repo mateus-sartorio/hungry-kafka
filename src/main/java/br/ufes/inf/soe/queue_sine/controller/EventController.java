@@ -2,7 +2,6 @@ package br.ufes.inf.soe.queue_sine.controller;
 
 import br.ufes.inf.soe.queue_sine.config.TopicNames;
 import br.ufes.inf.soe.queue_sine.dto.CartEvent;
-import br.ufes.inf.soe.queue_sine.dto.ClickStreamEvent;
 import br.ufes.inf.soe.queue_sine.dto.ItemViewEvent;
 import br.ufes.inf.soe.queue_sine.dto.CreateOrderRequest;
 import br.ufes.inf.soe.queue_sine.dto.OrderStatusEvent;
@@ -32,21 +31,6 @@ public class EventController {
     public ResponseEntity<Map<String, String>> itemView(@RequestBody ItemViewEvent event) {
         eventProducer.sendItemView(event);
         return accepted(TopicNames.ITEM_VIEW_EVENTS, String.valueOf(event.getClientId()));
-    }
-
-    @PostMapping("/click-stream")
-    public ResponseEntity<Map<String, String>> clickStream(@RequestBody ClickStreamEvent event) {
-        if (event.getEventId() == null) {
-            event.setEventId(UUID.randomUUID().toString());
-        }
-        if (event.getClickedAt() == null) {
-            event.setClickedAt(Instant.now());
-        }
-        if (event.getItemId() == null) {
-            event.setItemId(event.getTargetId());
-        }
-        eventProducer.sendClickStream(event);
-        return accepted(TopicNames.CLICK_STREAM_EVENTS, event.getEventId());
     }
 
     @PostMapping("/cart")
