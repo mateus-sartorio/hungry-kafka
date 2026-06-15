@@ -9,9 +9,9 @@
 		<relativePath/> <!-- lookup parent from repository -->
 	</parent>
 	<groupId>br.ufes.inf.soe</groupId>
-	<artifactId>queue-sine</artifactId>
+	<artifactId>hungry-kafka</artifactId>
 	<version>0.0.1-SNAPSHOT</version>
-	<name/>
+	<name>hungry-kafka</name>
 	<description/>
 	<url/>
 	<licenses>
@@ -49,6 +49,10 @@
 		<dependency>
 			<groupId>org.springframework.boot</groupId>
 			<artifactId>spring-boot-starter-kafka</artifactId>
+		</dependency>
+		<dependency>
+			<groupId>org.springframework.boot</groupId>
+			<artifactId>spring-boot-starter-websocket</artifactId>
 		</dependency>
 		<dependency>
 			<groupId>org.springframework.boot</groupId>

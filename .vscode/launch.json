@@ -6,10 +6,16 @@
   "configurations": [
     {
       "type": "java",
-      "name": "QueueSineApplication",
+      "name": "HungryKafkaApplication",
       "request": "launch",
-      "mainClass": "br.ufes.inf.soe.queue_sine.QueueSineApplication",
-      "projectName": "event-based-project"
+      "mainClass": "br.ufes.inf.soe.hungry_kafka.HungryKafkaApplication",
+      "projectName": "queue-sine"
+    },
+    {
+      "type": "java",
+      "name": "HungryKafkaApplication",
+      "request": "launch",
+      "mainClass": "br.ufes.inf.soe.hungry_kafka.HungryKafkaApplication"
     }
   ]
 }
