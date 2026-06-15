@@ -31,3 +31,6 @@ build/
 
 # Local SQLite database
 hungry-kafka.db
+
+# claude
+/.claude

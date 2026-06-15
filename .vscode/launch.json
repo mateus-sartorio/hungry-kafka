@@ -8,7 +8,14 @@
       "type": "java",
       "name": "HungryKafkaApplication",
       "request": "launch",
-      "mainClass": "br.ufes.inf.soe.hangry_kafka.HungryKafkaApplication",
+      "mainClass": "br.ufes.inf.soe.hungry_kafka.HungryKafkaApplication",
+      "projectName": "queue-sine"
+    },
+    {
+      "type": "java",
+      "name": "HungryKafkaApplication",
+      "request": "launch",
+      "mainClass": "br.ufes.inf.soe.hungry_kafka.HungryKafkaApplication"
     }
   ]
 }
