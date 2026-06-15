@@ -8,7 +8,7 @@ import java.util.List;
 
 @Getter
 @AllArgsConstructor
-public class OrderResponse {
+public class ClientOrderResponse {
     private Integer id;
     private Integer clientId;
     private List<OrderItemResponse> items;

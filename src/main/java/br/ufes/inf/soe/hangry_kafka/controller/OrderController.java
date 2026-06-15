@@ -13,7 +13,7 @@ import br.ufes.inf.soe.hangry_kafka.dto.ClientDto;
 import br.ufes.inf.soe.hangry_kafka.dto.CreateOrderRequest;
 import br.ufes.inf.soe.hangry_kafka.dto.OrderItemInput;
 import br.ufes.inf.soe.hangry_kafka.dto.OrderItemResponse;
-import br.ufes.inf.soe.hangry_kafka.dto.OrderResponse;
+import br.ufes.inf.soe.hangry_kafka.dto.ClientOrderResponse;
 import br.ufes.inf.soe.hangry_kafka.dto.ProductResponse;
 import br.ufes.inf.soe.hangry_kafka.dto.StoreOrderResponse;
 import br.ufes.inf.soe.hangry_kafka.entity.Client;
@@ -33,6 +33,7 @@ import br.ufes.inf.soe.hangry_kafka.repository.OrderItemRepository;
 import br.ufes.inf.soe.hangry_kafka.repository.OrderRepository;
 import br.ufes.inf.soe.hangry_kafka.repository.OrderStatusRepository;
 import br.ufes.inf.soe.hangry_kafka.repository.ProductRepository;
+import br.ufes.inf.soe.hangry_kafka.websocket.WebSocketService;
 
 import java.time.Instant;
 import java.util.ArrayList;
@@ -66,6 +67,7 @@ public class OrderController {
     public final ClientCategoryPreferenceRepository clientCategoryPreferenceRepository;
     public final ClientProductPreferenceRepository clientProductPreferenceRepository;
     public final KafkaListeners kafkaListeners;
+    public final WebSocketService webSocketService;
 
     public OrderController(
             OrderRepository orderRepository,
@@ -75,7 +77,8 @@ public class OrderController {
             OrderStatusRepository orderStatusRepository,
             ClientCategoryPreferenceRepository clientCategoryPreferenceRepository,
             ClientProductPreferenceRepository clientProductPreferenceRepository,
-            KafkaListeners kafkaListeners) {
+            KafkaListeners kafkaListeners,
+            WebSocketService webSocketService) {
         this.orderRepository = orderRepository;
         this.orderItemRepository = orderItemRepository;
         this.productRepository = productRepository;
@@ -84,21 +87,18 @@ public class OrderController {
         this.clientCategoryPreferenceRepository = clientCategoryPreferenceRepository;
         this.clientProductPreferenceRepository = clientProductPreferenceRepository;
         this.kafkaListeners = kafkaListeners;
+        this.webSocketService = webSocketService;
     }
 
     @GetMapping
     public ResponseEntity<List<StoreOrderResponse>> listAllOrders() {
-        List<StoreOrderResponse> orders = orderRepository.findAll().stream()
-                .map(this::toStoreResponse)
-                .collect(Collectors.toList());
+        List<StoreOrderResponse> orders = orderRepository.findAll().stream().map(this::toStoreResponse).collect(Collectors.toList());
         return ResponseEntity.ok(orders);
     }
 
     @GetMapping("/client/{clientId}")
-    public ResponseEntity<List<OrderResponse>> listOrdersByClient(@PathVariable Integer clientId) {
-        List<OrderResponse> orders = orderRepository.findByClient_Id(clientId).stream()
-                .map(this::toResponse)
-                .collect(Collectors.toList());
+    public ResponseEntity<List<ClientOrderResponse>> listOrdersByClient(@PathVariable Integer clientId) {
+        List<ClientOrderResponse> orders = orderRepository.findByClient_Id(clientId).stream().map(this::toClientResponse).collect(Collectors.toList());
         return ResponseEntity.ok(orders);
     }
 
@@ -135,9 +135,7 @@ public class OrderController {
         order.setCreatedAt(Instant.now());
         OrderEntity saved = orderRepository.save(order);
 
-        List<OrderItem> rows = request.getItems().stream()
-                .map(line -> new OrderItem(null, saved, line.getProductId(), line.getQuantity()))
-                .toList();
+        List<OrderItem> rows = request.getItems().stream().map(line -> new OrderItem(null, saved, line.getProductId(), line.getQuantity())).toList();
         orderItemRepository.saveAll(rows);
 
         for (OrderItemInput item : request.getItems()) {
@@ -148,63 +146,59 @@ public class OrderController {
 
             Integer categoryId = product.getCategory().getId();
 
-            ClientCategoryPreferenceId categoryPrefId = new ClientCategoryPreferenceId(request.getClientId(),
-                    categoryId);
-            ClientCategoryPreference categoryPref = clientCategoryPreferenceRepository.findById(categoryPrefId)
-                    .orElse(null);
+            ClientCategoryPreferenceId categoryPrefId = new ClientCategoryPreferenceId(request.getClientId(), categoryId);
+            ClientCategoryPreference categoryPreference = clientCategoryPreferenceRepository.findById(categoryPrefId).orElse(null);
 
-            if (categoryPref == null) {
-                categoryPref = new ClientCategoryPreference();
-                categoryPref.setId(categoryPrefId);
-                categoryPref.setClient(client);
-                categoryPref.setValue(orderPreferenceMultiplier);
-                categoryPref.setUpdatedAt(Instant.now());
-                clientCategoryPreferenceRepository.save(categoryPref);
+            if (categoryPreference == null) {
+                categoryPreference = new ClientCategoryPreference();
+                categoryPreference.setId(categoryPrefId);
+                categoryPreference.setClient(client);
+                categoryPreference.setValue(orderPreferenceMultiplier);
+                categoryPreference.setUpdatedAt(Instant.now());
+                clientCategoryPreferenceRepository.save(categoryPreference);
             } else {
-                Float newValue = categoryPref.getValue() * orderPreferenceMultiplier;
-                categoryPref.setValue(newValue);
-                categoryPref.setUpdatedAt(Instant.now());
-                clientCategoryPreferenceRepository.save(categoryPref);
+                Float newValue = categoryPreference.getValue() * orderPreferenceMultiplier;
+                categoryPreference.setValue(newValue);
+                categoryPreference.setUpdatedAt(Instant.now());
+                clientCategoryPreferenceRepository.save(categoryPreference);
             }
 
-            ClientProductPreferenceId productPrefId = new ClientProductPreferenceId(request.getClientId(),
-                    item.getProductId());
-            ClientProductPreference productPref = clientProductPreferenceRepository.findById(productPrefId)
-                    .orElse(null);
+            ClientProductPreferenceId productPreferenceId = new ClientProductPreferenceId(request.getClientId(), item.getProductId());
+            ClientProductPreference productPreference = clientProductPreferenceRepository.findById(productPreferenceId).orElse(null);
 
-            if (productPref == null) {
-                productPref = new ClientProductPreference();
-                productPref.setId(productPrefId);
-                productPref.setClient(client);
-                productPref.setValue(orderPreferenceMultiplier);
-                productPref.setUpdatedAt(Instant.now());
-                clientProductPreferenceRepository.save(productPref);
+            if (productPreference == null) {
+                productPreference = new ClientProductPreference();
+                productPreference.setId(productPreferenceId);
+                productPreference.setClient(client);
+                productPreference.setValue(orderPreferenceMultiplier);
+                productPreference.setUpdatedAt(Instant.now());
+                clientProductPreferenceRepository.save(productPreference);
             } else {
-                Float newValue = productPref.getValue() * orderPreferenceMultiplier;
-                productPref.setValue(newValue);
-                productPref.setUpdatedAt(Instant.now());
-                clientProductPreferenceRepository.save(productPref);
+                Float newValue = productPreference.getValue() * orderPreferenceMultiplier;
+                productPreference.setValue(newValue);
+                productPreference.setUpdatedAt(Instant.now());
+                clientProductPreferenceRepository.save(productPreference);
             }
 
             kafkaListeners.recordHotItemHit(item.getProductId());
         }
 
+        webSocketService.sendOrderUpdate(saved.getId(), toClientResponse(saved), toStoreResponse(saved));
+
         return ResponseEntity.ok().build();
     }
 
-    private OrderResponse toResponse(OrderEntity order) {
+    private ClientOrderResponse toClientResponse(OrderEntity order) {
         Integer clientId = order.getClient() != null ? order.getClient().getId() : null;
         String status = order.getStatus() != null ? order.getStatus().getName() : null;
-        return new OrderResponse(order.getId(), clientId, buildItemResponses(order), order.getCreatedAt(),
-                order.getExpectedDelivery(), status);
+        return new ClientOrderResponse(order.getId(), clientId, buildItemResponses(order), order.getCreatedAt(), order.getExpectedDelivery(), status);
     }
 
     private StoreOrderResponse toStoreResponse(OrderEntity order) {
         Client client = order.getClient();
         ClientDto clientDto = client != null ? new ClientDto(client.getId(), client.getName()) : null;
         String status = order.getStatus() != null ? order.getStatus().getName() : null;
-        return new StoreOrderResponse(order.getId(), clientDto, buildItemResponses(order), order.getCreatedAt(),
-                order.getExpectedDelivery(), status);
+        return new StoreOrderResponse(order.getId(), clientDto, buildItemResponses(order), order.getCreatedAt(), order.getExpectedDelivery(), status);
     }
 
     private List<OrderItemResponse> buildItemResponses(OrderEntity order) {
@@ -232,12 +226,7 @@ public class OrderController {
     }
 
     private ProductResponse toProductResponse(Product product) {
-        return new ProductResponse(
-                product.getId(),
-                product.getName(),
-                product.getDescription(),
-                product.getPrice(),
-                product.getPhotoUrl(),
-                1.0f);
+        return new ProductResponse(product.getId(), product.getName(), product.getDescription(), product.getPrice(), product.getPhotoUrl(), 1.0f);
     }
+    
 }

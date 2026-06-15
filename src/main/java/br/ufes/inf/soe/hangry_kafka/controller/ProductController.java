@@ -42,46 +42,32 @@ public class ProductController {
 
         Client client = clientRepository.findById(clientId).orElse(null);
 
-        Map<Integer, ClientProductPreference> productPrefs = (client != null && client.getProductPreferences() != null)
-                ? client.getProductPreferences()
-                : Collections.emptyMap();
-        Map<Integer, ClientCategoryPreference> categoryPrefs = (client != null
-                && client.getCategoryPreferences() != null)
-                        ? client.getCategoryPreferences()
-                        : Collections.emptyMap();
+        Map<Integer, ClientProductPreference> productPrefs = (client != null && client.getProductPreferences() != null) ? client.getProductPreferences() : Collections.emptyMap();
+        Map<Integer, ClientCategoryPreference> categoryPrefs = (client != null && client.getCategoryPreferences() != null) ? client.getCategoryPreferences() : Collections.emptyMap();
 
         List<Product> products = productRepository.findAll();
 
-        return products.stream()
-                .map(product -> {
-                    float productPriority = 1.0f;
-                    ClientProductPreference pPref = productPrefs.get(product.getId());
-                    if (pPref != null && pPref.getValue() != null) {
-                        productPriority = pPref.getValue();
-                    }
+        return products.stream().map(product -> {
+            float productPriority = 1.0f;
+            ClientProductPreference pPref = productPrefs.get(product.getId());
+            if (pPref != null && pPref.getValue() != null) {
+                productPriority = pPref.getValue();
+            }
 
-                    float categoryPriority = 1.0f;
-                    if (product.getCategory() != null) {
-                        ClientCategoryPreference cPref = categoryPrefs.get(product.getCategory().getId());
-                        if (cPref != null && cPref.getValue() != null) {
-                            categoryPriority = cPref.getValue();
-                        }
-                    }
+            float categoryPriority = 1.0f;
+            if (product.getCategory() != null) {
+                ClientCategoryPreference cPref = categoryPrefs.get(product.getCategory().getId());
+                if (cPref != null && cPref.getValue() != null) {
+                    categoryPriority = cPref.getValue();
+                }
+            }
 
-                    float totalPriority = productPriority * categoryPriority;
-                    return new SimpleEntry<>(product, totalPriority);
-                })
-                .sorted((e1, e2) -> Float.compare(e2.getValue(), e1.getValue()))
-                .map(entry -> {
-                    Product p = entry.getKey();
-                    return new ProductResponse(
-                            p.getId(),
-                            p.getName(),
-                            p.getDescription(),
-                            p.getPrice(),
-                            p.getPhotoUrl(),
-                            entry.getValue());
-                })
-                .collect(Collectors.toList());
+            float totalPriority = productPriority * categoryPriority;
+            
+            return new SimpleEntry<>(product, totalPriority);
+        }).sorted((e1, e2) -> Float.compare(e2.getValue(), e1.getValue())).map(entry -> {
+            Product p = entry.getKey();
+            return new ProductResponse(p.getId(), p.getName(), p.getDescription(), p.getPrice(), p.getPhotoUrl(), entry.getValue());
+        }).collect(Collectors.toList());
     }
 }

@@ -25,7 +25,7 @@ import br.ufes.inf.soe.hangry_kafka.dto.CartEvent;
 import br.ufes.inf.soe.hangry_kafka.dto.ClientDto;
 import br.ufes.inf.soe.hangry_kafka.dto.ItemViewEvent;
 import br.ufes.inf.soe.hangry_kafka.dto.OrderItemResponse;
-import br.ufes.inf.soe.hangry_kafka.dto.OrderResponse;
+import br.ufes.inf.soe.hangry_kafka.dto.ClientOrderResponse;
 import br.ufes.inf.soe.hangry_kafka.dto.OrderStatusEvent;
 import br.ufes.inf.soe.hangry_kafka.dto.ProductResponse;
 import br.ufes.inf.soe.hangry_kafka.dto.StoreOrderResponse;
@@ -78,15 +78,8 @@ public class KafkaListeners {
 
     private final Map<Integer, List<Instant>> productBumps = new ConcurrentHashMap<>();
 
-    public KafkaListeners(OrderRepository orderRepository,
-            OrderItemRepository orderItemRepository,
-            ClientRepository clientRepository,
-            OrderStatusRepository orderStatusRepository,
-            ProductRepository productRepository,
-            ClientCategoryPreferenceRepository clientCategoryPreferenceRepository,
-            ClientProductPreferenceRepository clientProductPreferenceRepository,
-            KafkaTemplate<String, Object> kafkaTemplate,
-            WebSocketService webSocketService) {
+    public KafkaListeners(OrderRepository orderRepository, OrderItemRepository orderItemRepository, ClientRepository clientRepository, OrderStatusRepository orderStatusRepository, ProductRepository productRepository, ClientCategoryPreferenceRepository clientCategoryPreferenceRepository,
+            ClientProductPreferenceRepository clientProductPreferenceRepository, KafkaTemplate<String, Object> kafkaTemplate, WebSocketService webSocketService) {
         this.orderRepository = orderRepository;
         this.orderItemRepository = orderItemRepository;
         this.clientRepository = clientRepository;
@@ -110,8 +103,7 @@ public class KafkaListeners {
             timestamps.removeIf(t -> t.isBefore(cutoff));
 
             if (timestamps.size() >= hotItemThreshold) {
-                kafkaTemplate.send(TopicNames.HOT_ITEM_EVENTS, String.valueOf(productId),
-                        "{\"productId\": " + productId + "}");
+                kafkaTemplate.send(TopicNames.HOT_ITEM_EVENTS, String.valueOf(productId), "{\"productId\": " + productId + "}");
                 webSocketService.sendHotItemAlert(productId);
                 timestamps.clear();
             }
@@ -145,8 +137,7 @@ public class KafkaListeners {
         }
 
         ClientCategoryPreferenceId categoryPrefId = new ClientCategoryPreferenceId(event.getClientId(), categoryId);
-        ClientCategoryPreference categoryPref = clientCategoryPreferenceRepository.findById(categoryPrefId)
-                .orElse(null);
+        ClientCategoryPreference categoryPref = clientCategoryPreferenceRepository.findById(categoryPrefId).orElse(null);
 
         if (categoryPref == null) {
             categoryPref = new ClientCategoryPreference();
@@ -162,10 +153,8 @@ public class KafkaListeners {
             clientCategoryPreferenceRepository.save(categoryPref);
         }
 
-        ClientProductPreferenceId productPrefId = new ClientProductPreferenceId(event.getClientId(),
-                event.getProductId());
-        ClientProductPreference productPref = clientProductPreferenceRepository.findById(productPrefId)
-                .orElse(null);
+        ClientProductPreferenceId productPrefId = new ClientProductPreferenceId(event.getClientId(), event.getProductId());
+        ClientProductPreference productPref = clientProductPreferenceRepository.findById(productPrefId).orElse(null);
 
         if (productPref == null) {
             productPref = new ClientProductPreference();
@@ -214,8 +203,7 @@ public class KafkaListeners {
         }
 
         ClientCategoryPreferenceId categoryPrefId = new ClientCategoryPreferenceId(event.getClientId(), categoryId);
-        ClientCategoryPreference categoryPref = clientCategoryPreferenceRepository.findById(categoryPrefId)
-                .orElse(null);
+        ClientCategoryPreference categoryPref = clientCategoryPreferenceRepository.findById(categoryPrefId).orElse(null);
 
         if (categoryPref == null) {
             categoryPref = new ClientCategoryPreference();
@@ -231,10 +219,8 @@ public class KafkaListeners {
             clientCategoryPreferenceRepository.save(categoryPref);
         }
 
-        ClientProductPreferenceId productPrefId = new ClientProductPreferenceId(event.getClientId(),
-                event.getProductId());
-        ClientProductPreference productPref = clientProductPreferenceRepository.findById(productPrefId)
-                .orElse(null);
+        ClientProductPreferenceId productPrefId = new ClientProductPreferenceId(event.getClientId(), event.getProductId());
+        ClientProductPreference productPref = clientProductPreferenceRepository.findById(productPrefId).orElse(null);
 
         if (productPref == null) {
             productPref = new ClientProductPreference();
@@ -304,7 +290,7 @@ public class KafkaListeners {
         orderRepository.save(order);
 
         StoreOrderResponse storeOrderResponse = toStoreResponse(order);
-        OrderResponse orderResponse = toResponse(order);
+        ClientOrderResponse orderResponse = toResponse(order);
 
         kafkaTemplate.send(TopicNames.ORDER_STATUS_CHANGED, String.valueOf(orderId), storeOrderResponse);
 
@@ -328,19 +314,17 @@ public class KafkaListeners {
         };
     }
 
-    private OrderResponse toResponse(OrderEntity order) {
+    private ClientOrderResponse toResponse(OrderEntity order) {
         Integer clientId = order.getClient() != null ? order.getClient().getId() : null;
         String status = order.getStatus() != null ? order.getStatus().getName() : null;
-        return new OrderResponse(order.getId(), clientId, buildItemResponses(order), order.getCreatedAt(),
-                order.getExpectedDelivery(), status);
+        return new ClientOrderResponse(order.getId(), clientId, buildItemResponses(order), order.getCreatedAt(), order.getExpectedDelivery(), status);
     }
 
     private StoreOrderResponse toStoreResponse(OrderEntity order) {
         Client client = order.getClient();
         ClientDto clientDto = client != null ? new ClientDto(client.getId(), client.getName()) : null;
         String status = order.getStatus() != null ? order.getStatus().getName() : null;
-        return new StoreOrderResponse(order.getId(), clientDto, buildItemResponses(order), order.getCreatedAt(),
-                order.getExpectedDelivery(), status);
+        return new StoreOrderResponse(order.getId(), clientDto, buildItemResponses(order), order.getCreatedAt(), order.getExpectedDelivery(), status);
     }
 
     private List<OrderItemResponse> buildItemResponses(OrderEntity order) {
@@ -368,12 +352,6 @@ public class KafkaListeners {
     }
 
     private ProductResponse toProductResponse(Product product) {
-        return new ProductResponse(
-                product.getId(),
-                product.getName(),
-                product.getDescription(),
-                product.getPrice(),
-                product.getPhotoUrl(),
-                1.0f);
+        return new ProductResponse(product.getId(), product.getName(), product.getDescription(), product.getPrice(), product.getPhotoUrl(), 1.0f);
     }
 }
