@@ -23,9 +23,7 @@ import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import br.ufes.inf.soe.hangry_kafka.config.TopicNames;
 import br.ufes.inf.soe.hangry_kafka.dto.CartEvent;
 import br.ufes.inf.soe.hangry_kafka.dto.ClientDto;
-import br.ufes.inf.soe.hangry_kafka.dto.CreateOrderRequest;
 import br.ufes.inf.soe.hangry_kafka.dto.ItemViewEvent;
-import br.ufes.inf.soe.hangry_kafka.dto.OrderItemInput;
 import br.ufes.inf.soe.hangry_kafka.dto.OrderItemResponse;
 import br.ufes.inf.soe.hangry_kafka.dto.OrderResponse;
 import br.ufes.inf.soe.hangry_kafka.dto.OrderStatusEvent;
@@ -47,11 +45,21 @@ import br.ufes.inf.soe.hangry_kafka.repository.OrderItemRepository;
 import br.ufes.inf.soe.hangry_kafka.repository.OrderRepository;
 import br.ufes.inf.soe.hangry_kafka.repository.OrderStatusRepository;
 import br.ufes.inf.soe.hangry_kafka.repository.ProductRepository;
+import br.ufes.inf.soe.hangry_kafka.websocket.WebSocketService;
 
 @Component
 public class KafkaListeners {
 
-    private static final String INITIAL_STATUS_NAME = "CREATED";
+    private final ObjectMapper objectMapper = new ObjectMapper().registerModule(new JavaTimeModule());
+    private final OrderRepository orderRepository;
+    private final OrderItemRepository orderItemRepository;
+    private final ClientRepository clientRepository;
+    private final OrderStatusRepository orderStatusRepository;
+    private final ProductRepository productRepository;
+    private final ClientCategoryPreferenceRepository clientCategoryPreferenceRepository;
+    private final ClientProductPreferenceRepository clientProductPreferenceRepository;
+    private final KafkaTemplate<String, Object> kafkaTemplate;
+    private final WebSocketService webSocketService;
 
     @Value("${app.hot-item.threshold:10}")
     private int hotItemThreshold;
@@ -59,9 +67,38 @@ public class KafkaListeners {
     @Value("${app.hot-item.duration-seconds:15}")
     private int hotItemDurationSeconds;
 
+    @Value("${app.preference.cart.multiplier:1.05}")
+    private Float cartPreferenceMultiplier;
+
+    @Value("${app.preference.itemview.multiplier:1.01}")
+    private Float itemviewPreferenceMultiplier;
+
+    @Value("${app.preference.order.multiplier:1.01}")
+    private Float orderPreferenceMultiplier;
+
     private final Map<Integer, List<Instant>> productBumps = new ConcurrentHashMap<>();
 
-    private void recordHotItemHit(Integer productId) {
+    public KafkaListeners(OrderRepository orderRepository,
+            OrderItemRepository orderItemRepository,
+            ClientRepository clientRepository,
+            OrderStatusRepository orderStatusRepository,
+            ProductRepository productRepository,
+            ClientCategoryPreferenceRepository clientCategoryPreferenceRepository,
+            ClientProductPreferenceRepository clientProductPreferenceRepository,
+            KafkaTemplate<String, Object> kafkaTemplate,
+            WebSocketService webSocketService) {
+        this.orderRepository = orderRepository;
+        this.orderItemRepository = orderItemRepository;
+        this.clientRepository = clientRepository;
+        this.orderStatusRepository = orderStatusRepository;
+        this.productRepository = productRepository;
+        this.clientCategoryPreferenceRepository = clientCategoryPreferenceRepository;
+        this.clientProductPreferenceRepository = clientProductPreferenceRepository;
+        this.kafkaTemplate = kafkaTemplate;
+        this.webSocketService = webSocketService;
+    }
+
+    public void recordHotItemHit(Integer productId) {
         productBumps.compute(productId, (id, timestamps) -> {
             if (timestamps == null) {
                 timestamps = new ArrayList<>();
@@ -73,48 +110,13 @@ public class KafkaListeners {
             timestamps.removeIf(t -> t.isBefore(cutoff));
 
             if (timestamps.size() >= hotItemThreshold) {
-                kafkaTemplate.send(TopicNames.HOT_ITEM_EVENTS, String.valueOf(productId), "{\"productId\": " + productId + "}");
+                kafkaTemplate.send(TopicNames.HOT_ITEM_EVENTS, String.valueOf(productId),
+                        "{\"productId\": " + productId + "}");
+                webSocketService.sendHotItemAlert(productId);
                 timestamps.clear();
             }
             return timestamps;
         });
-    }
-
-    @Value("${app.preference.cart.multiplier:1.05}")
-    private Float cartPreferenceMultiplier;
-
-    @Value("${app.preference.itemview.multiplier:1.01}")
-    private Float itemviewPreferenceMultiplier;
-
-    @Value("${app.preference.order.multiplier:1.01}")
-    private Float orderPreferenceMultiplier;
-
-    private final ObjectMapper objectMapper = new ObjectMapper().registerModule(new JavaTimeModule());
-    private final OrderRepository orderRepository;
-    private final OrderItemRepository orderItemRepository;
-    private final ClientRepository clientRepository;
-    private final OrderStatusRepository orderStatusRepository;
-    private final ProductRepository productRepository;
-    private final ClientCategoryPreferenceRepository clientCategoryPreferenceRepository;
-    private final ClientProductPreferenceRepository clientProductPreferenceRepository;
-    private final KafkaTemplate<String, Object> kafkaTemplate;
-
-    public KafkaListeners(OrderRepository orderRepository,
-            OrderItemRepository orderItemRepository,
-            ClientRepository clientRepository,
-            OrderStatusRepository orderStatusRepository,
-            ProductRepository productRepository,
-            ClientCategoryPreferenceRepository clientCategoryPreferenceRepository,
-            ClientProductPreferenceRepository clientProductPreferenceRepository,
-            KafkaTemplate<String, Object> kafkaTemplate) {
-        this.orderRepository = orderRepository;
-        this.orderItemRepository = orderItemRepository;
-        this.clientRepository = clientRepository;
-        this.orderStatusRepository = orderStatusRepository;
-        this.productRepository = productRepository;
-        this.clientCategoryPreferenceRepository = clientCategoryPreferenceRepository;
-        this.clientProductPreferenceRepository = clientProductPreferenceRepository;
-        this.kafkaTemplate = kafkaTemplate;
     }
 
     @KafkaListener(topics = TopicNames.ITEM_VIEW_EVENTS, groupId = "hungry-kafka-group")
@@ -311,101 +313,8 @@ public class KafkaListeners {
             String clientTopic = TopicNames.ORDER_STATUS_CHANGED + "-" + clientId;
             kafkaTemplate.send(clientTopic, String.valueOf(orderId), orderResponse);
         }
-    }
 
-    @KafkaListener(topics = TopicNames.ORDER_EVENTS, groupId = "hungry-kafka-group")
-    @Transactional
-    public void handleOrderEvent(ConsumerRecord<String, String> record) {
-        CreateOrderRequest payload;
-        try {
-            payload = objectMapper.readValue(record.value(), CreateOrderRequest.class);
-        } catch (JsonProcessingException e) {
-            return;
-        }
-
-        for (int i = 0; i < payload.getItems().size(); i++) {
-            OrderItemInput line = payload.getItems().get(i);
-            if (line == null || line.getProductId() == null || line.getQuantity() == null || line.getQuantity() < 1) {
-                return;
-            }
-        }
-
-        Client client = clientRepository.findById(payload.getClientId()).orElse(null);
-        if (client == null) {
-            return;
-        }
-
-        Set<Integer> productIds = new HashSet<>();
-        for (OrderItemInput line : payload.getItems()) {
-            productIds.add(line.getProductId());
-        }
-        if (productRepository.findAllById(productIds).size() != productIds.size()) {
-            return;
-        }
-
-        OrderStatusEntity status = orderStatusRepository.findByName(INITIAL_STATUS_NAME).orElse(null);
-        if (status == null) {
-            return;
-        }
-
-        OrderEntity order = new OrderEntity();
-        order.setClient(client);
-        order.setStatus(status);
-        order.setCreatedAt(Instant.now());
-        OrderEntity saved = orderRepository.save(order);
-
-        List<OrderItem> rows = payload.getItems().stream()
-                .map(line -> new OrderItem(null, saved, line.getProductId(), line.getQuantity()))
-                .toList();
-        orderItemRepository.saveAll(rows);
-
-        for (OrderItemInput item : payload.getItems()) {
-            Product product = productRepository.findById(item.getProductId()).orElse(null);
-            if (product == null || product.getCategory() == null) {
-                continue;
-            }
-
-            Integer categoryId = product.getCategory().getId();
-
-            ClientCategoryPreferenceId categoryPrefId = new ClientCategoryPreferenceId(payload.getClientId(),
-                    categoryId);
-            ClientCategoryPreference categoryPref = clientCategoryPreferenceRepository.findById(categoryPrefId)
-                    .orElse(null);
-
-            if (categoryPref == null) {
-                categoryPref = new ClientCategoryPreference();
-                categoryPref.setId(categoryPrefId);
-                categoryPref.setClient(client);
-                categoryPref.setValue(orderPreferenceMultiplier);
-                categoryPref.setUpdatedAt(Instant.now());
-                clientCategoryPreferenceRepository.save(categoryPref);
-            } else {
-                Float newValue = categoryPref.getValue() * orderPreferenceMultiplier;
-                categoryPref.setValue(newValue);
-                categoryPref.setUpdatedAt(Instant.now());
-                clientCategoryPreferenceRepository.save(categoryPref);
-            }
-
-            ClientProductPreferenceId productPrefId = new ClientProductPreferenceId(payload.getClientId(),
-                    item.getProductId());
-            ClientProductPreference productPref = clientProductPreferenceRepository.findById(productPrefId)
-                    .orElse(null);
-
-            if (productPref == null) {
-                productPref = new ClientProductPreference();
-                productPref.setId(productPrefId);
-                productPref.setClient(client);
-                productPref.setValue(orderPreferenceMultiplier);
-                productPref.setUpdatedAt(Instant.now());
-                clientProductPreferenceRepository.save(productPref);
-            } else {
-                Float newValue = productPref.getValue() * orderPreferenceMultiplier;
-                productPref.setValue(newValue);
-                productPref.setUpdatedAt(Instant.now());
-                clientProductPreferenceRepository.save(productPref);
-            }
-            recordHotItemHit(item.getProductId());
-        }
+        webSocketService.sendOrderUpdate(orderId, orderResponse, storeOrderResponse);
     }
 
     private static boolean isAllowedStatusTransition(String current, String target) {
