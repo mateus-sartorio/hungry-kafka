@@ -21,14 +21,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 
 import br.ufes.inf.soe.hungry_kafka.config.TopicNames;
-import br.ufes.inf.soe.hungry_kafka.dto.CartEvent;
-import br.ufes.inf.soe.hungry_kafka.dto.ClientDto;
-import br.ufes.inf.soe.hungry_kafka.dto.ClientOrderResponse;
-import br.ufes.inf.soe.hungry_kafka.dto.ItemViewEvent;
-import br.ufes.inf.soe.hungry_kafka.dto.OrderItemResponse;
-import br.ufes.inf.soe.hungry_kafka.dto.OrderStatusEvent;
-import br.ufes.inf.soe.hungry_kafka.dto.ProductResponse;
-import br.ufes.inf.soe.hungry_kafka.dto.StoreOrderResponse;
+import br.ufes.inf.soe.hungry_kafka.dto.*;
 import br.ufes.inf.soe.hungry_kafka.entity.Client;
 import br.ufes.inf.soe.hungry_kafka.entity.ClientCategoryPreference;
 import br.ufes.inf.soe.hungry_kafka.entity.ClientCategoryPreferenceId;
@@ -61,11 +54,7 @@ public class KafkaListeners {
     private final KafkaTemplate<String, Object> kafkaTemplate;
     private final WebSocketService webSocketService;
 
-    @Value("${app.hot-item.threshold:10}")
-    private int hotItemThreshold;
 
-    @Value("${app.hot-item.duration-seconds:15}")
-    private int hotItemDurationSeconds;
 
     @Value("${app.preference.cart.multiplier:1.05}")
     private Float cartPreferenceMultiplier;
@@ -76,7 +65,6 @@ public class KafkaListeners {
     @Value("${app.preference.order.multiplier:1.01}")
     private Float orderPreferenceMultiplier;
 
-    private final Map<Integer, List<Instant>> productBumps = new ConcurrentHashMap<>();
 
     public KafkaListeners(OrderRepository orderRepository, OrderItemRepository orderItemRepository, ClientRepository clientRepository, OrderStatusRepository orderStatusRepository, ProductRepository productRepository, ClientCategoryPreferenceRepository clientCategoryPreferenceRepository,
             ClientProductPreferenceRepository clientProductPreferenceRepository, KafkaTemplate<String, Object> kafkaTemplate, WebSocketService webSocketService) {
@@ -91,24 +79,15 @@ public class KafkaListeners {
         this.webSocketService = webSocketService;
     }
 
-    public void recordHotItemHit(Integer productId) {
-        productBumps.compute(productId, (id, timestamps) -> {
-            if (timestamps == null) {
-                timestamps = new ArrayList<>();
-            }
-            Instant now = Instant.now();
-            timestamps.add(now);
-
-            Instant cutoff = now.minusSeconds(hotItemDurationSeconds);
-            timestamps.removeIf(t -> t.isBefore(cutoff));
-
-            if (timestamps.size() >= hotItemThreshold) {
-                kafkaTemplate.send(TopicNames.HOT_ITEM_EVENTS, String.valueOf(productId), "{\"productId\": " + productId + "}");
-                webSocketService.sendHotItemAlert(productId);
-                timestamps.clear();
-            }
-            return timestamps;
-        });
+    @KafkaListener(topics = TopicNames.HOT_ITEM_EVENTS, groupId = "hungry-kafka-group")
+    public void handleHotItemEvent(ConsumerRecord<String, String> record) {
+        HotItemEvent event;
+        try {
+            event = objectMapper.readValue(record.value(), HotItemEvent.class);
+            webSocketService.sendHotItemAlert(event);
+        } catch (JsonProcessingException e) {
+            e.printStackTrace();
+        }
     }
 
     @KafkaListener(topics = TopicNames.ITEM_VIEW_EVENTS, groupId = "hungry-kafka-group")
@@ -170,7 +149,7 @@ public class KafkaListeners {
             clientProductPreferenceRepository.save(productPref);
         }
 
-        recordHotItemHit(event.getProductId());
+
     }
 
     @KafkaListener(topics = TopicNames.CART_EVENTS, groupId = "hungry-kafka-group")
@@ -236,7 +215,7 @@ public class KafkaListeners {
             clientProductPreferenceRepository.save(productPref);
         }
 
-        recordHotItemHit(event.getProductId());
+
     }
 
     @KafkaListener(topics = TopicNames.ORDER_STATUS_EVENTS, groupId = "hungry-kafka-group")
