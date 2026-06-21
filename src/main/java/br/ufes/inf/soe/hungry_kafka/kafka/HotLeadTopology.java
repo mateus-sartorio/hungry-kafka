@@ -10,6 +10,7 @@ import org.apache.kafka.streams.KeyValue;
 import org.apache.kafka.streams.StreamsBuilder;
 import org.apache.kafka.streams.kstream.*;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.kafka.support.serializer.JacksonJsonSerde;
 import org.springframework.stereotype.Component;
 
@@ -17,6 +18,15 @@ import java.time.Duration;
 
 @Component
 public class HotLeadTopology {
+
+    @Value("${app.hot-lead.join-window-minutes:5}")
+    private long joinWindowMinutes;
+
+    @Value("${app.hot-lead.view-threshold:5}")
+    private long viewThreshold;
+
+    @Value("${app.hot-item.duration-seconds:15}")
+    private long countWindowSeconds;
 
     @Autowired
     public void buildTopology(StreamsBuilder builder) {
@@ -27,12 +37,12 @@ public class HotLeadTopology {
         KStream<String, ItemViewEvent> views = builder.stream(
                 TopicNames.ITEM_VIEW_EVENTS,
                 Consumed.with(Serdes.String(), viewSerde)
-        ).peek((String key, ItemViewEvent value) -> System.out.println("[Topic: item-view-events] Received -> Client: " + (value != null ? value.getClientId() : "null") + " viewed Product: " + (value != null ? value.getProductId() : "null")));
+        ).peek((String key, ItemViewEvent value) -> System.out.println(String.format("[Topic: item-view-events] Received -> Client: %s viewed Product: %s", value != null ? value.getClientId() : "null", value != null ? value.getProductId() : "null")));
 
         KStream<String, CartEvent> carts = builder.stream(
                 TopicNames.CART_EVENTS,
                 Consumed.with(Serdes.String(), cartSerde)
-        ).peek((String key, CartEvent value) -> System.out.println("[Topic: cart-events] Received -> Client: " + (value != null ? value.getClientId() : "null") + " performed " + (value != null ? value.getAction() : "null") + " on Product: " + (value != null ? value.getProductId() : "null")));
+        ).peek((String key, CartEvent value) -> System.out.println(String.format("[Topic: cart-events] Received -> Client: %s performed %s on Product: %s", value != null ? value.getClientId() : "null", value != null ? value.getAction() : "null", value != null ? value.getProductId() : "null")));
 
         // Rekey views to clientId_productId
         KStream<String, ItemViewEvent> viewsRekeyed = views
@@ -52,16 +62,16 @@ public class HotLeadTopology {
                 .toStream()
                 .peek((key, count) -> {
                     String[] parts = key.key().split("_");
-                    System.out.println("[Aggregation] Client: " + parts[0] + " viewed Product: " + parts[1] + " exactly " + count + " times in this window");
+                    System.out.println(String.format("[Aggregation] Client: %s viewed Product: %s exactly %d times in this window", parts[0], parts[1], count));
                 })
-                .filter((Windowed<String> key, Long count) -> count == 5L)
+                .filter((Windowed<String> key, Long count) -> count == viewThreshold)
                 .map((Windowed<String> key, Long value) -> KeyValue.pair(key.key(), value));
 
         // Join frequentViews and carts within a 5 minute window
         KStream<String, String> joinedStream = frequentViews.join(
                 cartsRekeyed,
                 (Long count, CartEvent cart) -> "HOT_LEAD",
-                JoinWindows.ofTimeDifferenceWithNoGrace(Duration.ofMinutes(5)),
+                JoinWindows.ofTimeDifferenceWithNoGrace(Duration.ofMinutes(joinWindowMinutes)),
                 StreamJoined.with(Serdes.String(), Serdes.Long(), cartSerde)
         );
 
@@ -70,7 +80,7 @@ public class HotLeadTopology {
             String[] parts = key.split("_");
             Integer clientId = Integer.parseInt(parts[0]);
             Integer productId = Integer.parseInt(parts[1]);
-            System.out.println("HOT LEAD DETECTED! Client: " + clientId + " Product: " + productId);
+            System.out.println(String.format("HOT LEAD DETECTED! Client: %d Product: %d", clientId, productId));
             return KeyValue.pair(String.valueOf(clientId), new HotItemEvent(clientId, productId));
         }).to(TopicNames.HOT_ITEM_EVENTS, Produced.with(Serdes.String(), hotItemSerde));
     }

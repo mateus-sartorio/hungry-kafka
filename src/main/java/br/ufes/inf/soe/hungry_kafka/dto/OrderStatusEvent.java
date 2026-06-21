@@ -9,7 +9,6 @@ import lombok.Setter;
 @Setter
 @Getter
 public class OrderStatusEvent {
-
     private String eventId;
     private String orderId;
     private String userId;
@@ -18,8 +17,4 @@ public class OrderStatusEvent {
     private OrderStatus status;
     private Duration expectedDelivery;
     private Instant occurredAt;
-
-    public OrderStatusEvent() {
-    }
-
 }

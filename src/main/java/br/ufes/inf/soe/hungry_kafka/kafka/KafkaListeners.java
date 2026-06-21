@@ -7,7 +7,6 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import java.util.concurrent.ConcurrentHashMap;
 
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.springframework.beans.factory.annotation.Value;
@@ -81,10 +80,19 @@ public class KafkaListeners {
 
     @KafkaListener(topics = TopicNames.HOT_ITEM_EVENTS, groupId = "hungry-kafka-group")
     public void handleHotItemEvent(ConsumerRecord<String, String> record) {
-        HotItemEvent event;
         try {
-            event = objectMapper.readValue(record.value(), HotItemEvent.class);
+            HotItemEvent event = objectMapper.readValue(record.value(), HotItemEvent.class);
             webSocketService.sendHotItemAlert(event);
+        } catch (JsonProcessingException e) {
+            e.printStackTrace();
+        }
+    }
+
+    @KafkaListener(topics = TopicNames.ABANDONED_CART_EVENTS, groupId = "hungry-kafka-group")
+    public void handleAbandonedCartEvent(ConsumerRecord<String, String> record) {
+        try {
+            AbandonedCartEvent event = objectMapper.readValue(record.value(), AbandonedCartEvent.class);
+            webSocketService.sendAbandonedCartAlert(event);
         } catch (JsonProcessingException e) {
             e.printStackTrace();
         }
@@ -116,40 +124,38 @@ public class KafkaListeners {
         }
 
         ClientCategoryPreferenceId categoryPrefId = new ClientCategoryPreferenceId(event.getClientId(), categoryId);
-        ClientCategoryPreference categoryPref = clientCategoryPreferenceRepository.findById(categoryPrefId).orElse(null);
+        ClientCategoryPreference categoryPreference = clientCategoryPreferenceRepository.findById(categoryPrefId).orElse(null);
 
-        if (categoryPref == null) {
-            categoryPref = new ClientCategoryPreference();
-            categoryPref.setId(categoryPrefId);
-            categoryPref.setClient(client);
-            categoryPref.setValue(itemviewPreferenceMultiplier);
-            categoryPref.setUpdatedAt(Instant.now());
-            clientCategoryPreferenceRepository.save(categoryPref);
+        if (categoryPreference == null) {
+            categoryPreference = new ClientCategoryPreference();
+            categoryPreference.setId(categoryPrefId);
+            categoryPreference.setClient(client);
+            categoryPreference.setValue(itemviewPreferenceMultiplier);
+            categoryPreference.setUpdatedAt(Instant.now());
+            clientCategoryPreferenceRepository.save(categoryPreference);
         } else {
-            Float newValue = categoryPref.getValue() * itemviewPreferenceMultiplier;
-            categoryPref.setValue(newValue);
-            categoryPref.setUpdatedAt(Instant.now());
-            clientCategoryPreferenceRepository.save(categoryPref);
+            Float newValue = categoryPreference.getValue() * itemviewPreferenceMultiplier;
+            categoryPreference.setValue(newValue);
+            categoryPreference.setUpdatedAt(Instant.now());
+            clientCategoryPreferenceRepository.save(categoryPreference);
         }
 
         ClientProductPreferenceId productPrefId = new ClientProductPreferenceId(event.getClientId(), event.getProductId());
-        ClientProductPreference productPref = clientProductPreferenceRepository.findById(productPrefId).orElse(null);
+        ClientProductPreference productPreference = clientProductPreferenceRepository.findById(productPrefId).orElse(null);
 
-        if (productPref == null) {
-            productPref = new ClientProductPreference();
-            productPref.setId(productPrefId);
-            productPref.setClient(client);
-            productPref.setValue(itemviewPreferenceMultiplier);
-            productPref.setUpdatedAt(Instant.now());
-            clientProductPreferenceRepository.save(productPref);
+        if (productPreference == null) {
+            productPreference = new ClientProductPreference();
+            productPreference.setId(productPrefId);
+            productPreference.setClient(client);
+            productPreference.setValue(itemviewPreferenceMultiplier);
+            productPreference.setUpdatedAt(Instant.now());
+            clientProductPreferenceRepository.save(productPreference);
         } else {
-            Float newValue = productPref.getValue() * itemviewPreferenceMultiplier;
-            productPref.setValue(newValue);
-            productPref.setUpdatedAt(Instant.now());
-            clientProductPreferenceRepository.save(productPref);
+            Float newValue = productPreference.getValue() * itemviewPreferenceMultiplier;
+            productPreference.setValue(newValue);
+            productPreference.setUpdatedAt(Instant.now());
+            clientProductPreferenceRepository.save(productPreference);
         }
-
-
     }
 
     @KafkaListener(topics = TopicNames.CART_EVENTS, groupId = "hungry-kafka-group")
@@ -159,6 +165,7 @@ public class KafkaListeners {
         try {
             event = objectMapper.readValue(record.value(), CartEvent.class);
         } catch (JsonProcessingException e) {
+            e.printStackTrace();
             return;
         }
 

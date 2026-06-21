@@ -55,4 +55,12 @@ public class KafkaTopicConfig {
                 .replicas(2)
                 .build();
     }
+
+    @Bean
+    public NewTopic abandonedCartEventsTopic() {
+        return TopicBuilder.name(TopicNames.ABANDONED_CART_EVENTS)
+                .partitions(3)
+                .replicas(1)
+                .build();
+    }
 }

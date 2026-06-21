@@ -33,6 +33,7 @@ import br.ufes.inf.soe.hungry_kafka.repository.OrderItemRepository;
 import br.ufes.inf.soe.hungry_kafka.repository.OrderRepository;
 import br.ufes.inf.soe.hungry_kafka.repository.OrderStatusRepository;
 import br.ufes.inf.soe.hungry_kafka.repository.ProductRepository;
+import br.ufes.inf.soe.hungry_kafka.producer.EventProducer;
 import br.ufes.inf.soe.hungry_kafka.websocket.WebSocketService;
 
 import java.time.Instant;
@@ -68,6 +69,7 @@ public class OrderController {
     public final ClientProductPreferenceRepository clientProductPreferenceRepository;
 
     public final WebSocketService webSocketService;
+    public final EventProducer eventProducer;
 
     public OrderController(
             OrderRepository orderRepository,
@@ -77,7 +79,8 @@ public class OrderController {
             OrderStatusRepository orderStatusRepository,
             ClientCategoryPreferenceRepository clientCategoryPreferenceRepository,
             ClientProductPreferenceRepository clientProductPreferenceRepository,
-            WebSocketService webSocketService) {
+            WebSocketService webSocketService,
+            EventProducer eventProducer) {
         this.orderRepository = orderRepository;
         this.orderItemRepository = orderItemRepository;
         this.productRepository = productRepository;
@@ -87,6 +90,7 @@ public class OrderController {
         this.clientProductPreferenceRepository = clientProductPreferenceRepository;
 
         this.webSocketService = webSocketService;
+        this.eventProducer = eventProducer;
     }
 
     @GetMapping
@@ -183,6 +187,10 @@ public class OrderController {
         }
 
         webSocketService.sendOrderUpdate(saved.getId(), toClientResponse(saved), toStoreResponse(saved));
+
+        // Publish the order so the abandoned-cart topology can see that this client
+        // placed an order (keyed by clientId) and therefore did NOT abandon the cart.
+        eventProducer.sendOrder(request);
 
         return ResponseEntity.ok().build();
     }

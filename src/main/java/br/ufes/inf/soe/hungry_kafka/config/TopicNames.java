@@ -9,6 +9,7 @@ public final class TopicNames {
 
     public static final String HOT_ITEM_EVENTS = "hot-item-events";
     public static final String ORDER_STATUS_CHANGED = "order-status-changed";
+    public static final String ABANDONED_CART_EVENTS = "abandoned-cart-events";
 
     private TopicNames() {
     }
