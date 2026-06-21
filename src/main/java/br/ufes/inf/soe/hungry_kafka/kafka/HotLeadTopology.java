@@ -27,12 +27,12 @@ public class HotLeadTopology {
         KStream<String, ItemViewEvent> views = builder.stream(
                 TopicNames.ITEM_VIEW_EVENTS,
                 Consumed.with(Serdes.String(), viewSerde)
-        ).peek((String key, ItemViewEvent value) -> System.out.println("[Topic: item-view-events] Recebido -> Client: " + (value != null ? value.getClientId() : "null") + " viu Product: " + (value != null ? value.getProductId() : "null")));
+        ).peek((String key, ItemViewEvent value) -> System.out.println("[Topic: item-view-events] Received -> Client: " + (value != null ? value.getClientId() : "null") + " viewed Product: " + (value != null ? value.getProductId() : "null")));
 
         KStream<String, CartEvent> carts = builder.stream(
                 TopicNames.CART_EVENTS,
                 Consumed.with(Serdes.String(), cartSerde)
-        ).peek((String key, CartEvent value) -> System.out.println("[Topic: cart-events] Recebido -> Client: " + (value != null ? value.getClientId() : "null") + " executou " + (value != null ? value.getAction() : "null") + " no Product: " + (value != null ? value.getProductId() : "null")));
+        ).peek((String key, CartEvent value) -> System.out.println("[Topic: cart-events] Received -> Client: " + (value != null ? value.getClientId() : "null") + " performed " + (value != null ? value.getAction() : "null") + " on Product: " + (value != null ? value.getProductId() : "null")));
 
         // Rekey views to clientId_productId
         KStream<String, ItemViewEvent> viewsRekeyed = views
@@ -52,7 +52,7 @@ public class HotLeadTopology {
                 .toStream()
                 .peek((key, count) -> {
                     String[] parts = key.key().split("_");
-                    System.out.println("[Agregação] Client: " + parts[0] + " viu Product: " + parts[1] + " exatamente " + count + " vezes nesta janela");
+                    System.out.println("[Aggregation] Client: " + parts[0] + " viewed Product: " + parts[1] + " exactly " + count + " times in this window");
                 })
                 .filter((Windowed<String> key, Long count) -> count == 5L)
                 .map((Windowed<String> key, Long value) -> KeyValue.pair(key.key(), value));
