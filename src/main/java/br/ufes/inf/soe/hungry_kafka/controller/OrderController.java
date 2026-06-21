@@ -25,7 +25,7 @@ import br.ufes.inf.soe.hungry_kafka.entity.OrderEntity;
 import br.ufes.inf.soe.hungry_kafka.entity.OrderItem;
 import br.ufes.inf.soe.hungry_kafka.entity.OrderStatusEntity;
 import br.ufes.inf.soe.hungry_kafka.entity.Product;
-import br.ufes.inf.soe.hungry_kafka.kafka.KafkaListeners;
+
 import br.ufes.inf.soe.hungry_kafka.repository.ClientCategoryPreferenceRepository;
 import br.ufes.inf.soe.hungry_kafka.repository.ClientProductPreferenceRepository;
 import br.ufes.inf.soe.hungry_kafka.repository.ClientRepository;
@@ -66,7 +66,7 @@ public class OrderController {
     public final OrderStatusRepository orderStatusRepository;
     public final ClientCategoryPreferenceRepository clientCategoryPreferenceRepository;
     public final ClientProductPreferenceRepository clientProductPreferenceRepository;
-    public final KafkaListeners kafkaListeners;
+
     public final WebSocketService webSocketService;
 
     public OrderController(
@@ -77,7 +77,6 @@ public class OrderController {
             OrderStatusRepository orderStatusRepository,
             ClientCategoryPreferenceRepository clientCategoryPreferenceRepository,
             ClientProductPreferenceRepository clientProductPreferenceRepository,
-            KafkaListeners kafkaListeners,
             WebSocketService webSocketService) {
         this.orderRepository = orderRepository;
         this.orderItemRepository = orderItemRepository;
@@ -86,7 +85,7 @@ public class OrderController {
         this.orderStatusRepository = orderStatusRepository;
         this.clientCategoryPreferenceRepository = clientCategoryPreferenceRepository;
         this.clientProductPreferenceRepository = clientProductPreferenceRepository;
-        this.kafkaListeners = kafkaListeners;
+
         this.webSocketService = webSocketService;
     }
 
@@ -180,7 +179,7 @@ public class OrderController {
                 clientProductPreferenceRepository.save(productPreference);
             }
 
-            kafkaListeners.recordHotItemHit(item.getProductId());
+
         }
 
         webSocketService.sendOrderUpdate(saved.getId(), toClientResponse(saved), toStoreResponse(saved));

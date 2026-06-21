@@ -1,9 +1,9 @@
 package br.ufes.inf.soe.hungry_kafka.websocket;
 
-import java.util.Map;
-
 import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.stereotype.Service;
+
+import br.ufes.inf.soe.hungry_kafka.dto.HotItemEvent;
 
 @Service
 public class WebSocketService {
@@ -19,7 +19,8 @@ public class WebSocketService {
         messagingTemplate.convertAndSend("/topic/orders", storePayload);
     }
 
-    public void sendHotItemAlert(Integer productId) {
-        messagingTemplate.convertAndSend("/topic/hot-items", (Object) Map.of("productId", productId));
+    public void sendHotItemAlert(HotItemEvent event) {
+        messagingTemplate.convertAndSend("/topic/hot-items", event);
     }
 }
+
