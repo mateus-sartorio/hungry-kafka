@@ -9,6 +9,7 @@ import lombok.Setter;
 @Getter
 @NoArgsConstructor
 @AllArgsConstructor
-public class HotItemEvent {
+public class LeadItemEvent {
+    private Integer clientId;
     private Integer productId;
 }

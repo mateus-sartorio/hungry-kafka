@@ -3,8 +3,9 @@ package br.ufes.inf.soe.hungry_kafka.kafka;
 import br.ufes.inf.soe.hungry_kafka.config.TopicNames;
 import br.ufes.inf.soe.hungry_kafka.dto.CartAction;
 import br.ufes.inf.soe.hungry_kafka.dto.CartEvent;
-import br.ufes.inf.soe.hungry_kafka.dto.HotItemEvent;
 import br.ufes.inf.soe.hungry_kafka.dto.ItemViewEvent;
+import br.ufes.inf.soe.hungry_kafka.dto.LeadItemEvent;
+
 import org.apache.kafka.common.serialization.Serdes;
 import org.apache.kafka.streams.KeyValue;
 import org.apache.kafka.streams.StreamsBuilder;
@@ -17,7 +18,7 @@ import org.springframework.stereotype.Component;
 import java.time.Duration;
 
 @Component
-public class HotLeadTopology {
+public class LeadItemTopology {
 
     @Value("${app.hot-lead.join-window-minutes:5}")
     private long joinWindowMinutes;
@@ -32,7 +33,7 @@ public class HotLeadTopology {
     public void buildTopology(StreamsBuilder builder) {
         JacksonJsonSerde<ItemViewEvent> viewSerde = new JacksonJsonSerde<>(ItemViewEvent.class);
         JacksonJsonSerde<CartEvent> cartSerde = new JacksonJsonSerde<>(CartEvent.class);
-        JacksonJsonSerde<HotItemEvent> hotItemSerde = new JacksonJsonSerde<>(HotItemEvent.class);
+        JacksonJsonSerde<LeadItemEvent> leadItemSerde = new JacksonJsonSerde<>(LeadItemEvent.class);
 
         KStream<String, ItemViewEvent> views = builder.stream(
                 TopicNames.ITEM_VIEW_EVENTS,
@@ -64,7 +65,7 @@ public class HotLeadTopology {
                     String[] parts = key.key().split("_");
                     System.out.println(String.format("[Aggregation] Client: %s viewed Product: %s exactly %d times in this window", parts[0], parts[1], count));
                 })
-                .filter((Windowed<String> key, Long count) -> count == viewThreshold)
+                .filter((Windowed<String> key, Long count) -> count >= viewThreshold)
                 .map((Windowed<String> key, Long value) -> KeyValue.pair(key.key(), value));
 
         // Join frequentViews and carts within a 5 minute window
@@ -75,13 +76,13 @@ public class HotLeadTopology {
                 StreamJoined.with(Serdes.String(), Serdes.Long(), cartSerde)
         );
 
-        // Map to HotItemEvent and send to topic
+        // Map to LeadItemEvent and send to topic
         joinedStream.map((String key, String value) -> {
             String[] parts = key.split("_");
             Integer clientId = Integer.parseInt(parts[0]);
             Integer productId = Integer.parseInt(parts[1]);
             System.out.println(String.format("HOT LEAD DETECTED! Client: %d Product: %d", clientId, productId));
-            return KeyValue.pair(String.valueOf(clientId), new HotItemEvent(clientId, productId));
-        }).to(TopicNames.HOT_ITEM_EVENTS, Produced.with(Serdes.String(), hotItemSerde));
+            return KeyValue.pair(String.valueOf(clientId), new LeadItemEvent(clientId, productId));
+        }).to(TopicNames.LEAD_ITEM_EVENTS, Produced.with(Serdes.String(), leadItemSerde));
     }
 }

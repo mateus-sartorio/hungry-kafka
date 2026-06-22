@@ -1,5 +1,6 @@
 package br.ufes.inf.soe.hungry_kafka.entity;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import jakarta.persistence.*;
 import lombok.AllArgsConstructor;
 import lombok.Data;
@@ -24,6 +25,7 @@ public class ClientProductPreference {
     @JoinColumn(name = "client_id")
     @ToString.Exclude
     @EqualsAndHashCode.Exclude
+    @JsonIgnore
     private Client client;
 
     @Column(nullable = false)

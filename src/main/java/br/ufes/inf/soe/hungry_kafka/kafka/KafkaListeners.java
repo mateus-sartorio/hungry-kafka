@@ -78,6 +78,16 @@ public class KafkaListeners {
         this.webSocketService = webSocketService;
     }
 
+    @KafkaListener(topics = TopicNames.LEAD_ITEM_EVENTS, groupId = "hungry-kafka-group")
+    public void handleLeadItemEvent(ConsumerRecord<String, String> record) {
+        try {
+            LeadItemEvent event = objectMapper.readValue(record.value(), LeadItemEvent.class);
+            webSocketService.sendLeadItemAlert(event);
+        } catch (JsonProcessingException e) {
+            e.printStackTrace();
+        }
+    }
+
     @KafkaListener(topics = TopicNames.HOT_ITEM_EVENTS, groupId = "hungry-kafka-group")
     public void handleHotItemEvent(ConsumerRecord<String, String> record) {
         try {

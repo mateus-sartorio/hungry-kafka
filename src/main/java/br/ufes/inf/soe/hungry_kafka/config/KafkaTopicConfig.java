@@ -41,6 +41,14 @@ public class KafkaTopicConfig {
     }
 
     @Bean
+    public NewTopic leadItemEventsTopic() {
+        return TopicBuilder.name(TopicNames.LEAD_ITEM_EVENTS)
+                .partitions(3)
+                .replicas(1)
+                .build();
+    }
+
+    @Bean
     public NewTopic hotItemEventsTopic() {
         return TopicBuilder.name(TopicNames.HOT_ITEM_EVENTS)
                 .partitions(3)

@@ -5,6 +5,7 @@ import org.springframework.stereotype.Service;
 
 import br.ufes.inf.soe.hungry_kafka.dto.AbandonedCartEvent;
 import br.ufes.inf.soe.hungry_kafka.dto.HotItemEvent;
+import br.ufes.inf.soe.hungry_kafka.dto.LeadItemEvent;
 
 @Service
 public class WebSocketService {
@@ -20,7 +21,12 @@ public class WebSocketService {
         messagingTemplate.convertAndSend("/topic/orders", storePayload);
     }
 
+    public void sendLeadItemAlert(LeadItemEvent event) {
+        messagingTemplate.convertAndSend("/topic/lead-items", event);
+    }
+
     public void sendHotItemAlert(HotItemEvent event) {
+        // Broadcast destination: every client and the store subscribe to /topic/hot-items.
         messagingTemplate.convertAndSend("/topic/hot-items", event);
     }
 
