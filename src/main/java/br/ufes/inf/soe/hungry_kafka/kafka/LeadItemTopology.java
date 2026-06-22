@@ -38,22 +38,22 @@ public class LeadItemTopology {
         KStream<String, ItemViewEvent> views = builder.stream(
                 TopicNames.ITEM_VIEW_EVENTS,
                 Consumed.with(Serdes.String(), viewSerde)
-        ).peek((String key, ItemViewEvent value) -> System.out.println(String.format("[Topic: item-view-events] Received -> Client: %s viewed Product: %s", value != null ? value.getClientId() : "null", value != null ? value.getProductId() : "null")));
+        ).peek((String key, ItemViewEvent value) -> System.out.println(String.format("[Topic: item-view-events] Received -> Client: %s viewed Product: %s", value != null ? value.clientId() : "null", value != null ? value.productId() : "null")));
 
         KStream<String, CartEvent> carts = builder.stream(
                 TopicNames.CART_EVENTS,
                 Consumed.with(Serdes.String(), cartSerde)
-        ).peek((String key, CartEvent value) -> System.out.println(String.format("[Topic: cart-events] Received -> Client: %s performed %s on Product: %s", value != null ? value.getClientId() : "null", value != null ? value.getAction() : "null", value != null ? value.getProductId() : "null")));
+        ).peek((String key, CartEvent value) -> System.out.println(String.format("[Topic: cart-events] Received -> Client: %s performed %s on Product: %s", value != null ? value.clientId() : "null", value != null ? value.action() : "null", value != null ? value.productId() : "null")));
 
         // Rekey views to clientId_productId
         KStream<String, ItemViewEvent> viewsRekeyed = views
-                .filter((String key, ItemViewEvent value) -> value != null && value.getClientId() != null && value.getProductId() != null)
-                .selectKey((String key, ItemViewEvent value) -> value.getClientId() + "_" + value.getProductId());
+                .filter((String key, ItemViewEvent value) -> value != null && value.clientId() != null && value.productId() != null)
+                .selectKey((String key, ItemViewEvent value) -> value.clientId() + "_" + value.productId());
 
         // Rekey carts to clientId_productId and filter only ADD actions
         KStream<String, CartEvent> cartsRekeyed = carts
-                .filter((String key, CartEvent value) -> value != null && value.getAction() == CartAction.ADDED && value.getClientId() != null && value.getProductId() != null)
-                .selectKey((String key, CartEvent value) -> value.getClientId() + "_" + value.getProductId());
+                .filter((String key, CartEvent value) -> value != null && value.action() == CartAction.ADDED && value.clientId() != null && value.productId() != null)
+                .selectKey((String key, CartEvent value) -> value.clientId() + "_" + value.productId());
 
         // Count views in a Tumbling window of 5 minutes
         KStream<String, Long> frequentViews = viewsRekeyed

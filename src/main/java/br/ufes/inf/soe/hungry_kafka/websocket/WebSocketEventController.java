@@ -20,17 +20,17 @@ public class WebSocketEventController {
 
     @MessageMapping("/item-view")
     public void handleItemView(ItemViewEvent event) {
-        kafkaTemplate.send(TopicNames.ITEM_VIEW_EVENTS, String.valueOf(event.getProductId()), event);
+        kafkaTemplate.send(TopicNames.ITEM_VIEW_EVENTS, String.valueOf(event.productId()), event);
     }
 
     @MessageMapping("/cart-event")
     public void handleCartEvent(CartEvent event) {
-        kafkaTemplate.send(TopicNames.CART_EVENTS, String.valueOf(event.getProductId()), event);
+        kafkaTemplate.send(TopicNames.CART_EVENTS, String.valueOf(event.productId()), event);
     }
 
     @MessageMapping("/order-status")
     public void handleOrderStatusEvent(OrderStatusEvent event) {
-        kafkaTemplate.send(TopicNames.ORDER_STATUS_EVENTS, event.getOrderId(), event);
+        kafkaTemplate.send(TopicNames.ORDER_STATUS_EVENTS, event.orderId(), event);
     }
 
 }

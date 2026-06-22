@@ -4,8 +4,10 @@ import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.stereotype.Service;
 
 import br.ufes.inf.soe.hungry_kafka.dto.AbandonedCartEvent;
+import br.ufes.inf.soe.hungry_kafka.dto.ClientOrderResponse;
 import br.ufes.inf.soe.hungry_kafka.dto.HotItemEvent;
 import br.ufes.inf.soe.hungry_kafka.dto.LeadItemEvent;
+import br.ufes.inf.soe.hungry_kafka.dto.StoreOrderResponse;
 
 @Service
 public class WebSocketService {
@@ -16,7 +18,7 @@ public class WebSocketService {
         this.messagingTemplate = messagingTemplate;
     }
 
-    public void sendOrderUpdate(Integer orderId, Object clientPayload, Object storePayload) {
+    public void sendOrderUpdate(Integer orderId, ClientOrderResponse clientPayload, StoreOrderResponse storePayload) {
         messagingTemplate.convertAndSend("/topic/orders/" + orderId, clientPayload);
         messagingTemplate.convertAndSend("/topic/orders", storePayload);
     }
@@ -26,7 +28,6 @@ public class WebSocketService {
     }
 
     public void sendHotItemAlert(HotItemEvent event) {
-        // Broadcast destination: every client and the store subscribe to /topic/hot-items.
         messagingTemplate.convertAndSend("/topic/hot-items", event);
     }
 

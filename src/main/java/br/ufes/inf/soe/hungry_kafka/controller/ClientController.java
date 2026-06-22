@@ -23,7 +23,7 @@ public class ClientController {
     @PostMapping
     public ResponseEntity<Client> createClient(@RequestBody CreateClientRequest req) {
         Client client = new Client();
-        client.setName(req.getName());
+        client.setName(req.name());
         Client saved = clientRepository.save(client);
         return ResponseEntity.created(URI.create("/api/clients/" + saved.getId())).body(saved);
     }
@@ -41,7 +41,7 @@ public class ClientController {
             return ResponseEntity.notFound().build();
         }
         Client client = found.get();
-        client.setName(req.getName());
+        client.setName(req.name());
         Client saved = clientRepository.save(client);
         return ResponseEntity.ok(saved);
     }

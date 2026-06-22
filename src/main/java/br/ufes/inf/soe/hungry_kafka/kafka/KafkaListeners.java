@@ -118,12 +118,12 @@ public class KafkaListeners {
             return;
         }
 
-        Client client = clientRepository.findById(event.getClientId()).orElse(null);
+        Client client = clientRepository.findById(event.clientId()).orElse(null);
         if (client == null) {
             return;
         }
 
-        Product product = productRepository.findById(event.getProductId()).orElse(null);
+        Product product = productRepository.findById(event.productId()).orElse(null);
         if (product == null) {
             return;
         }
@@ -133,7 +133,7 @@ public class KafkaListeners {
             return;
         }
 
-        ClientCategoryPreferenceId categoryPrefId = new ClientCategoryPreferenceId(event.getClientId(), categoryId);
+        ClientCategoryPreferenceId categoryPrefId = new ClientCategoryPreferenceId(event.clientId(), categoryId);
         ClientCategoryPreference categoryPreference = clientCategoryPreferenceRepository.findById(categoryPrefId).orElse(null);
 
         if (categoryPreference == null) {
@@ -150,7 +150,7 @@ public class KafkaListeners {
             clientCategoryPreferenceRepository.save(categoryPreference);
         }
 
-        ClientProductPreferenceId productPrefId = new ClientProductPreferenceId(event.getClientId(), event.getProductId());
+        ClientProductPreferenceId productPrefId = new ClientProductPreferenceId(event.clientId(), event.productId());
         ClientProductPreference productPreference = clientProductPreferenceRepository.findById(productPrefId).orElse(null);
 
         if (productPreference == null) {
@@ -179,16 +179,16 @@ public class KafkaListeners {
             return;
         }
 
-        if (!event.getAction().name().equals("ADDED")) {
+        if (!event.action().name().equals("ADDED")) {
             return;
         }
 
-        Client client = clientRepository.findById(event.getClientId()).orElse(null);
+        Client client = clientRepository.findById(event.clientId()).orElse(null);
         if (client == null) {
             return;
         }
 
-        Product product = productRepository.findById(event.getProductId()).orElse(null);
+        Product product = productRepository.findById(event.productId()).orElse(null);
         if (product == null) {
             return;
         }
@@ -198,7 +198,7 @@ public class KafkaListeners {
             return;
         }
 
-        ClientCategoryPreferenceId categoryPrefId = new ClientCategoryPreferenceId(event.getClientId(), categoryId);
+        ClientCategoryPreferenceId categoryPrefId = new ClientCategoryPreferenceId(event.clientId(), categoryId);
         ClientCategoryPreference categoryPref = clientCategoryPreferenceRepository.findById(categoryPrefId).orElse(null);
 
         if (categoryPref == null) {
@@ -215,7 +215,7 @@ public class KafkaListeners {
             clientCategoryPreferenceRepository.save(categoryPref);
         }
 
-        ClientProductPreferenceId productPrefId = new ClientProductPreferenceId(event.getClientId(), event.getProductId());
+        ClientProductPreferenceId productPrefId = new ClientProductPreferenceId(event.clientId(), event.productId());
         ClientProductPreference productPref = clientProductPreferenceRepository.findById(productPrefId).orElse(null);
 
         if (productPref == null) {
@@ -231,8 +231,6 @@ public class KafkaListeners {
             productPref.setUpdatedAt(Instant.now());
             clientProductPreferenceRepository.save(productPref);
         }
-
-
     }
 
     @KafkaListener(topics = TopicNames.ORDER_STATUS_EVENTS, groupId = "hungry-kafka-group")
@@ -247,7 +245,7 @@ public class KafkaListeners {
 
         int orderId;
         try {
-            orderId = Integer.parseInt(event.getOrderId().trim());
+            orderId = Integer.parseInt(event.orderId().trim());
         } catch (NumberFormatException e) {
             return;
         }
@@ -262,7 +260,7 @@ public class KafkaListeners {
             return;
         }
 
-        String target = event.getStatus().name();
+        String target = event.status().name();
         if (current.equals(target)) {
             return;
         }
@@ -270,7 +268,7 @@ public class KafkaListeners {
             return;
         }
 
-        if ("OUT_FOR_DELIVERY".equals(target) && event.getExpectedDelivery() == null) {
+        if ("OUT_FOR_DELIVERY".equals(target) && event.expectedDelivery() == null) {
             return;
         }
 
@@ -281,7 +279,7 @@ public class KafkaListeners {
 
         order.setStatus(next);
         if ("OUT_FOR_DELIVERY".equals(target)) {
-            order.setExpectedDelivery(Instant.now().plus(event.getExpectedDelivery()));
+            order.setExpectedDelivery(Instant.now().plus(event.expectedDelivery()));
         }
         orderRepository.save(order);
 

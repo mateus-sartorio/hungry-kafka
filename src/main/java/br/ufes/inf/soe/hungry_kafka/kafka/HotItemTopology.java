@@ -55,26 +55,26 @@ public class HotItemTopology {
         KStream<String, String> views = builder.stream(
                         TopicNames.ITEM_VIEW_EVENTS,
                         Consumed.with(Serdes.String(), viewSerde))
-                .filter((String key, ItemViewEvent value) -> value != null && value.getProductId() != null)
-                .map((String key, ItemViewEvent value) -> KeyValue.pair(String.valueOf(value.getProductId()), "VIEW"));
+                .filter((String key, ItemViewEvent value) -> value != null && value.productId() != null)
+                .map((String key, ItemViewEvent value) -> KeyValue.pair(String.valueOf(value.productId()), "VIEW"));
 
         // A cart ADD = one interaction, keyed by productId (REMOVED is ignored).
         KStream<String, String> cartAdds = builder.stream(
                         TopicNames.CART_EVENTS,
                         Consumed.with(Serdes.String(), cartSerde))
-                .filter((String key, CartEvent value) -> value != null && value.getAction() == CartAction.ADDED && value.getProductId() != null)
-                .map((String key, CartEvent value) -> KeyValue.pair(String.valueOf(value.getProductId()), "CART"));
+                .filter((String key, CartEvent value) -> value != null && value.action() == CartAction.ADDED && value.productId() != null)
+                .map((String key, CartEvent value) -> KeyValue.pair(String.valueOf(value.productId()), "CART"));
 
         // A purchase = one interaction per order line, keyed by productId.
         KStream<String, String> purchases = builder.stream(
                         TopicNames.ORDER_EVENTS,
                         Consumed.with(Serdes.String(), orderSerde))
-                .filter((String key, CreateOrderRequest value) -> value != null && value.getItems() != null)
+                .filter((String key, CreateOrderRequest value) -> value != null && value.items() != null)
                 .flatMap((String key, CreateOrderRequest order) -> {
                     List<KeyValue<String, String>> interactions = new ArrayList<>();
-                    for (OrderItemInput item : order.getItems()) {
-                        if (item != null && item.getProductId() != null) {
-                            interactions.add(KeyValue.pair(String.valueOf(item.getProductId()), "ORDER"));
+                    for (OrderItemInput item : order.items()) {
+                        if (item != null && item.productId() != null) {
+                            interactions.add(KeyValue.pair(String.valueOf(item.productId()), "ORDER"));
                         }
                     }
                     return interactions;

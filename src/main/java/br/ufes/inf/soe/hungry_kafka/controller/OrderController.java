@@ -88,7 +88,6 @@ public class OrderController {
         this.orderStatusRepository = orderStatusRepository;
         this.clientCategoryPreferenceRepository = clientCategoryPreferenceRepository;
         this.clientProductPreferenceRepository = clientProductPreferenceRepository;
-
         this.webSocketService = webSocketService;
         this.eventProducer = eventProducer;
     }
@@ -107,21 +106,21 @@ public class OrderController {
 
     @PostMapping
     public ResponseEntity<Void> createOrder(@RequestBody CreateOrderRequest request) {
-        for (int i = 0; i < request.getItems().size(); i++) {
-            OrderItemInput line = request.getItems().get(i);
-            if (line == null || line.getProductId() == null || line.getQuantity() == null || line.getQuantity() < 1) {
+        for (int i = 0; i < request.items().size(); i++) {
+            OrderItemInput line = request.items().get(i);
+            if (line == null || line.productId() == null || line.quantity() == null || line.quantity() < 1) {
                 return ResponseEntity.badRequest().build();
             }
         }
 
-        Client client = clientRepository.findById(request.getClientId()).orElse(null);
+        Client client = clientRepository.findById(request.clientId()).orElse(null);
         if (client == null) {
             return ResponseEntity.badRequest().build();
         }
 
         Set<Integer> productIds = new HashSet<>();
-        for (OrderItemInput line : request.getItems()) {
-            productIds.add(line.getProductId());
+        for (OrderItemInput line : request.items()) {
+            productIds.add(line.productId());
         }
         if (productRepository.findAllById(productIds).size() != productIds.size()) {
             return ResponseEntity.badRequest().build();
@@ -138,18 +137,18 @@ public class OrderController {
         order.setCreatedAt(Instant.now());
         OrderEntity saved = orderRepository.save(order);
 
-        List<OrderItem> rows = request.getItems().stream().map(line -> new OrderItem(null, saved, line.getProductId(), line.getQuantity())).toList();
+        List<OrderItem> rows = request.items().stream().map(line -> new OrderItem(null, saved, line.productId(), line.quantity())).toList();
         orderItemRepository.saveAll(rows);
 
-        for (OrderItemInput item : request.getItems()) {
-            Product product = productRepository.findById(item.getProductId()).orElse(null);
+        for (OrderItemInput item : request.items()) {
+            Product product = productRepository.findById(item.productId()).orElse(null);
             if (product == null || product.getCategory() == null) {
                 continue;
             }
 
             Integer categoryId = product.getCategory().getId();
 
-            ClientCategoryPreferenceId categoryPrefId = new ClientCategoryPreferenceId(request.getClientId(), categoryId);
+            ClientCategoryPreferenceId categoryPrefId = new ClientCategoryPreferenceId(request.clientId(), categoryId);
             ClientCategoryPreference categoryPreference = clientCategoryPreferenceRepository.findById(categoryPrefId).orElse(null);
 
             if (categoryPreference == null) {
@@ -166,7 +165,7 @@ public class OrderController {
                 clientCategoryPreferenceRepository.save(categoryPreference);
             }
 
-            ClientProductPreferenceId productPreferenceId = new ClientProductPreferenceId(request.getClientId(), item.getProductId());
+            ClientProductPreferenceId productPreferenceId = new ClientProductPreferenceId(request.clientId(), item.productId());
             ClientProductPreference productPreference = clientProductPreferenceRepository.findById(productPreferenceId).orElse(null);
 
             if (productPreference == null) {
@@ -182,14 +181,10 @@ public class OrderController {
                 productPreference.setUpdatedAt(Instant.now());
                 clientProductPreferenceRepository.save(productPreference);
             }
-
-
         }
 
         webSocketService.sendOrderUpdate(saved.getId(), toClientResponse(saved), toStoreResponse(saved));
 
-        // Publish the order so the abandoned-cart topology can see that this client
-        // placed an order (keyed by clientId) and therefore did NOT abandon the cart.
         eventProducer.sendOrder(request);
 
         return ResponseEntity.ok().build();
@@ -235,5 +230,4 @@ public class OrderController {
     private ProductResponse toProductResponse(Product product) {
         return new ProductResponse(product.getId(), product.getName(), product.getDescription(), product.getPrice(), product.getPhotoUrl(), 1.0f);
     }
-    
 }

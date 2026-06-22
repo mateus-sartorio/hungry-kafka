@@ -19,25 +19,6 @@ import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
 
-/**
- * Situation A — Abandoned Cart (absence pattern).
- *
- * <p>A client adds items to the cart but does not place an order within a time
- * window. This is detected by co-grouping {@code cart-events} and {@code order}
- * by {@code clientId} into a tumbling window: the cart aggregate remembers which
- * products are still in the cart and whether an order arrived. The window result
- * is held back with {@code suppress(untilWindowCloses)} so a single record is
- * emitted only when the window finally closes; if it still holds items and no
- * order was seen, an {@link AbandonedCartEvent} is produced.
- *
- * <p>Stateless ops: filter, selectKey, map. Stateful ops: cogroup, windowedBy,
- * aggregate, suppress.
- *
- * <p>Note: a window only closes once stream time advances past its end, which
- * requires later records to arrive on the input topics. With no further traffic
- * the alert will not fire until the next event pushes stream time forward — an
- * inherent trait of windowed suppression rather than a wall-clock timer.
- */
 @Component
 public class AbandonedCartTopology {
 
@@ -64,8 +45,8 @@ public class AbandonedCartTopology {
         KStream<String, CartEvent> carts = builder.stream(
                         TopicNames.CART_EVENTS,
                         Consumed.with(Serdes.String(), cartSerde))
-                .filter((String key, CartEvent value) -> value != null && value.getClientId() != null && value.getProductId() != null && value.getAction() != null)
-                .selectKey((String key, CartEvent value) -> String.valueOf(value.getClientId()))
+                .filter((String key, CartEvent value) -> value != null && value.clientId() != null && value.productId() != null && value.action() != null)
+                .selectKey((String key, CartEvent value) -> String.valueOf(value.clientId()))
                 .repartition(Repartitioned.with(Serdes.String(), cartSerde)
                         .withName("abandoned-cart-carts")
                         .withNumberOfPartitions(COPARTITION_PARTITIONS));
@@ -74,8 +55,8 @@ public class AbandonedCartTopology {
         KStream<String, CreateOrderRequest> orders = builder.stream(
                         TopicNames.ORDER_EVENTS,
                         Consumed.with(Serdes.String(), orderSerde))
-                .filter((String key, CreateOrderRequest value) -> value != null && value.getClientId() != null)
-                .selectKey((String key, CreateOrderRequest value) -> String.valueOf(value.getClientId()))
+                .filter((String key, CreateOrderRequest value) -> value != null && value.clientId() != null)
+                .selectKey((String key, CreateOrderRequest value) -> String.valueOf(value.clientId()))
                 .repartition(Repartitioned.with(Serdes.String(), orderSerde)
                         .withName("abandoned-cart-orders")
                         .withNumberOfPartitions(COPARTITION_PARTITIONS));
@@ -90,10 +71,8 @@ public class AbandonedCartTopology {
         // Co-group carts and orders per client per window into a single state object
         KTable<Windowed<String>, AbandonedCartState> windowed = cartsByClient
                 .cogroup((String key, CartEvent cart, AbandonedCartState agg) -> applyCart(agg, cart))
-                .cogroup(ordersByClient, (String key, CreateOrderRequest order, AbandonedCartState agg) -> {
-                    agg.setOrdered(true);
-                    return agg;
-                })
+                .cogroup(ordersByClient, (String key, CreateOrderRequest order, AbandonedCartState agg) ->
+                        new AbandonedCartState(agg.productIds(), true))
                 .windowedBy(TimeWindows.ofSizeWithNoGrace(Duration.ofMinutes(windowMinutes)))
                 .aggregate(AbandonedCartState::new, Materialized.with(Serdes.String(), stateSerde))
                 // Emit one record per window only after the window closes
@@ -102,12 +81,12 @@ public class AbandonedCartTopology {
         windowed.toStream()
                 .peek((Windowed<String> key, AbandonedCartState state) -> System.out.println(String.format(
                         "[Window closed] Client: %s items-left: %s ordered: %s",
-                        key.key(), state != null ? state.getProductIds() : "null", state != null && state.isOrdered())))
+                        key.key(), state != null ? state.productIds() : "null", state != null && state.ordered())))
                 // Abandoned = items still in cart at window close AND no order placed
-                .filter((Windowed<String> key, AbandonedCartState state) -> state != null && !state.isOrdered() && !state.getProductIds().isEmpty())
+                .filter((Windowed<String> key, AbandonedCartState state) -> state != null && !state.ordered() && !state.productIds().isEmpty())
                 .map((Windowed<String> key, AbandonedCartState state) -> {
                     Integer clientId = Integer.parseInt(key.key());
-                    List<Integer> productIds = new ArrayList<>(state.getProductIds());
+                    List<Integer> productIds = new ArrayList<>(state.productIds());
                     System.out.println(String.format("ABANDONED CART DETECTED! Client: %d forgot products: %s", clientId, productIds));
                     return KeyValue.pair(key.key(), new AbandonedCartEvent(clientId, productIds));
                 })
@@ -115,10 +94,10 @@ public class AbandonedCartTopology {
     }
 
     private static AbandonedCartState applyCart(AbandonedCartState agg, CartEvent cart) {
-        if (cart.getAction() == CartAction.ADDED) {
-            agg.getProductIds().add(cart.getProductId());
-        } else if (cart.getAction() == CartAction.REMOVED) {
-            agg.getProductIds().remove(cart.getProductId());
+        if (cart.action() == CartAction.ADDED) {
+            agg.productIds().add(cart.productId());
+        } else if (cart.action() == CartAction.REMOVED) {
+            agg.productIds().remove(cart.productId());
         }
         return agg;
     }

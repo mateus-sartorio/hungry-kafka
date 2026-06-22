@@ -1,14 +1,4 @@
 package br.ufes.inf.soe.hungry_kafka.dto;
 
-import lombok.Getter;
-import lombok.NoArgsConstructor;
-import lombok.Setter;
-
-@Getter
-@Setter
-@NoArgsConstructor
-public class OrderItemInput {
-
-    private Integer productId;
-    private Integer quantity;
+public record OrderItemInput(Integer productId, Integer quantity) {
 }
