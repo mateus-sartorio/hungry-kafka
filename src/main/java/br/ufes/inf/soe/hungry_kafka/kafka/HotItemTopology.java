@@ -23,10 +23,10 @@ import java.util.List;
 @Component
 public class HotItemTopology {
 
-    @Value("${app.hot-item.window-minutes:10}")
+    @Value("${app.hot-item.window-minutes}")
     private long windowMinutes;
 
-    @Value("${app.hot-item.threshold:10}")
+    @Value("${app.hot-item.threshold}")
     private long threshold;
 
     @Autowired
@@ -63,18 +63,16 @@ public class HotItemTopology {
         KStream<String, HotItemEvent> hotItems = views
                 .merge(cartAdds)
                 .merge(purchases)
-                .peek((String productId, String type) -> System.out.println(
-                        String.format("[hot-item] interaction %s on Product: %s", type, productId)))
+                .peek((String productId, String type) -> IO.println(String.format("[hot-item] Interaction %s on Product: %s", type, productId)))
                 .groupByKey(Grouped.with(Serdes.String(), Serdes.String()))
                 .windowedBy(TimeWindows.ofSizeWithNoGrace(Duration.ofMinutes(windowMinutes)))
                 .count()
                 .toStream()
-                .peek((Windowed<String> key, Long count) -> System.out.println(
-                        String.format("[hot-item] Product: %s has %d interactions in this window", key.key(), count)))
+                .peek((Windowed<String> key, Long count) -> IO.println(String.format("[hot-item] Product: %s has %d interactions in this window", key.key(), count)))
                 .filter((Windowed<String> key, Long count) -> count >= threshold)
                 .map((Windowed<String> key, Long count) -> {
                     Integer productId = Integer.parseInt(key.key());
-                    System.out.println(String.format("HOT ITEM DETECTED! Product: %d (%d interactions in the last %d min)", productId, count, windowMinutes));
+                    IO.println(String.format("HOT ITEM DETECTED! Product: %d (%d interactions in the last %d min)", productId, count, windowMinutes));
                     return KeyValue.pair(key.key(), new HotItemEvent(productId));
                 });
 
