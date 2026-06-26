@@ -20,21 +20,6 @@ import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
 
-/**
- * Hot Item (popularity pattern).
- *
- * <p>Counts every interaction with a product — a view, a cart-add, or a purchase —
- * across <em>all</em> clients within a tumbling window. The three input streams are
- * normalised to a common {@code (productId -> interaction-type)} shape, merged into a
- * single stream, and counted per product per window. When a single product reaches
- * {@code threshold} interactions inside the window it is flagged as "hot" and a
- * {@link HotItemEvent} is produced, so every client and the store can be notified.
- *
- * <p>Stateless ops: filter, map, flatMap, merge. Stateful ops: windowedBy, count.
- *
- * <p>A purchase counts each order line once (regardless of its quantity); change the
- * {@code purchases} flatMap to expand by quantity if you want units to count individually.
- */
 @Component
 public class HotItemTopology {
 
@@ -51,36 +36,30 @@ public class HotItemTopology {
         JacksonJsonSerde<CreateOrderRequest> orderSerde = new JacksonJsonSerde<>(CreateOrderRequest.class);
         JacksonJsonSerde<HotItemEvent> hotItemSerde = new JacksonJsonSerde<>(HotItemEvent.class);
 
-        // A view = one interaction, keyed by productId.
         KStream<String, String> views = builder.stream(
                         TopicNames.ITEM_VIEW_EVENTS,
                         Consumed.with(Serdes.String(), viewSerde))
-                .filter((String key, ItemViewEvent value) -> value != null && value.productId() != null)
                 .map((String key, ItemViewEvent value) -> KeyValue.pair(String.valueOf(value.productId()), "VIEW"));
 
-        // A cart ADD = one interaction, keyed by productId (REMOVED is ignored).
         KStream<String, String> cartAdds = builder.stream(
                         TopicNames.CART_EVENTS,
                         Consumed.with(Serdes.String(), cartSerde))
-                .filter((String key, CartEvent value) -> value != null && value.action() == CartAction.ADDED && value.productId() != null)
+                .filter((String key, CartEvent value) -> value.action() == CartAction.ADDED)
                 .map((String key, CartEvent value) -> KeyValue.pair(String.valueOf(value.productId()), "CART"));
 
-        // A purchase = one interaction per order line, keyed by productId.
         KStream<String, String> purchases = builder.stream(
                         TopicNames.ORDER_EVENTS,
                         Consumed.with(Serdes.String(), orderSerde))
-                .filter((String key, CreateOrderRequest value) -> value != null && value.items() != null)
                 .flatMap((String key, CreateOrderRequest order) -> {
                     List<KeyValue<String, String>> interactions = new ArrayList<>();
+
                     for (OrderItemInput item : order.items()) {
-                        if (item != null && item.productId() != null) {
-                            interactions.add(KeyValue.pair(String.valueOf(item.productId()), "ORDER"));
-                        }
+                        interactions.add(KeyValue.pair(String.valueOf(item.productId()), "ORDER"));
                     }
+
                     return interactions;
                 });
 
-        // Merge the three interaction streams and count per product in a tumbling window.
         KStream<String, HotItemEvent> hotItems = views
                 .merge(cartAdds)
                 .merge(purchases)
