@@ -47,13 +47,13 @@ public class AbandonedCartTopology {
                         TopicNames.CART_EVENTS,
                         Consumed.with(Serdes.String(), cartSerde)
             )
-            .peek((String key, CartEvent value) -> IO.println(String.format("[Topic: cart-events] Received -> Client: %s performed %s on Product: %s", value.clientId(), value.action(), value.productId())))
+            .peek((String key, CartEvent value) -> IO.println(String.format("[AbandonedCartTopology] Received -> Client: %s performed %s on Product: %s", value.clientId(), value.action(), value.productId())))
             .selectKey((String key, CartEvent value) -> String.valueOf(value.clientId()));
 
         KStream<String, CreateOrderEvent> orders = builder.stream(
                         TopicNames.ORDER_EVENTS,
                         Consumed.with(Serdes.String(), orderSerde))
-                .peek((String key, CreateOrderEvent value) -> IO.println(String.format("[Topic: order-events] Received -> Client: %s placed order", value.clientId())))    
+                .peek((String key, CreateOrderEvent value) -> IO.println(String.format("[AbandonedCartTopology] Received -> Client: %s placed order", value.clientId())))    
                 .selectKey((String key, CreateOrderEvent value) -> String.valueOf(value.clientId()));
 
         KGroupedStream<String, CartEvent> cartsByClient = carts.groupByKey(Grouped.with("abandoned-cart-carts", Serdes.String(), cartSerde));
@@ -67,12 +67,12 @@ public class AbandonedCartTopology {
                 .suppress(Suppressed.untilWindowCloses(Suppressed.BufferConfig.unbounded()));
 
         windowed.toStream()
-                .peek((Windowed<String> key, AbandonedCartState state) -> IO.println(String.format("[Window closed] Client: %s items-left: %s ordered: %s", key.key(), state.productIds(), state.ordered())))
+                .peek((Windowed<String> key, AbandonedCartState state) -> IO.println(String.format("[AbandonedCartTopology] Window closed, client: %s items-left: %s ordered: %s", key.key(), state.productIds(), state.ordered())))
                 .filter((Windowed<String> key, AbandonedCartState state) -> !state.ordered())
                 .map((Windowed<String> key, AbandonedCartState state) -> {
                     Integer clientId = Integer.parseInt(key.key());
                     List<Integer> productIds = new ArrayList<>(state.productIds());
-                    IO.println(String.format("ABANDONED CART! Client: %d products: %s", clientId, productIds));
+                    IO.println(String.format("[AbandonedCartTopology] ABANDONED CART! Client: %d products: %s", clientId, productIds));
                     return KeyValue.pair(key.key(), new AbandonedCartEvent(clientId, productIds));
                 })
                 .to(TopicNames.ABANDONED_CART_EVENTS, Produced.with(Serdes.String(), abandonedSerde));

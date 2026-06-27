@@ -58,7 +58,7 @@ app:
 
   # Hot Lead Detection Configuration
   hot-lead:
-    join-window-minutes: 5
+    view-window-minutes: 1
     view-threshold: 5
 
   # Abandoned Cart Detection Configuration

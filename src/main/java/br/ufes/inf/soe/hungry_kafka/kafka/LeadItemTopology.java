@@ -20,14 +20,11 @@ import java.time.Duration;
 @Component
 public class LeadItemTopology {
 
-    @Value("${app.hot-lead.join-window-minutes}")
-    private long joinWindowMinutes;
+    @Value("${app.hot-lead.view-window-minutes}")
+    private long viewWindowMinutes;
 
     @Value("${app.hot-lead.view-threshold}")
     private long viewThreshold;
-
-    @Value("${app.hot-item.duration-seconds}")
-    private long countWindowSeconds;
 
     @Autowired
     public void buildTopology(StreamsBuilder builder) {
@@ -40,53 +37,44 @@ public class LeadItemTopology {
                         TopicNames.ITEM_VIEW_EVENTS,
                         Consumed.with(Serdes.String(), viewSerde)
                 )
-                .peek((String key, ItemViewEvent value) -> IO.println(String.format("[Topic: item-view-events] Received -> Client: %s viewed Product: %s", value.clientId(), value.productId())));
+                .peek((String key, ItemViewEvent value) -> IO.println(String.format("[LeadItemTopology] Received -> Client: %s viewed Product: %s", value.clientId(), value.productId())))
+                .selectKey((String key, ItemViewEvent value) -> value.clientId() + "_" + value.productId());
 
         KStream<String, CartEvent> carts = builder
                 .stream(
                         TopicNames.CART_EVENTS,
                         Consumed.with(Serdes.String(), cartSerde)
                 )
-                .peek((String key, CartEvent value) -> IO.println(String.format("[Topic: cart-events] Received -> Client: %s performed %s on Product: %s", value.clientId(), value.action(), value.productId())));
-
-        // Rekey views to clientId_productId
-        KStream<String, ItemViewEvent> viewsRekeyed = views
-                .filter((String key, ItemViewEvent value) -> value != null && value.clientId() != null && value.productId() != null)
-                .selectKey((String key, ItemViewEvent value) -> value.clientId() + "_" + value.productId());
-
-        // Rekey carts to clientId_productId and filter only ADD actions
-        KStream<String, CartEvent> cartsRekeyed = carts
-                .filter((String key, CartEvent value) -> value != null && value.action() == CartAction.ADDED && value.clientId() != null && value.productId() != null)
+                .peek((String key, CartEvent value) -> IO.println(String.format("[LeadItemTopology] Received -> Client: %s performed %s on Product: %s", value.clientId(), value.action(), value.productId())))
+                .filter((String key, CartEvent value) -> value.action() == CartAction.ADDED)
                 .selectKey((String key, CartEvent value) -> value.clientId() + "_" + value.productId());
 
-        // Count views in a Tumbling window of 5 minutes
-        KStream<String, Long> frequentViews = viewsRekeyed
+        KTable<String, Long> recentViewCounts = views
                 .groupByKey(Grouped.with(Serdes.String(), viewSerde))
-                .windowedBy(TimeWindows.ofSizeWithNoGrace(Duration.ofMinutes(5)))
+                .windowedBy(TimeWindows.ofSizeWithNoGrace(Duration.ofMinutes(viewWindowMinutes)))
                 .count()
                 .toStream()
-                .peek((key, count) -> {
+                .peek((Windowed<String> key, Long count) -> {
                     String[] parts = key.key().split("_");
-                    IO.println(String.format("[Aggregation] Client: %s viewed Product: %s exactly %d times in this window", parts[0], parts[1], count));
+                    IO.println(String.format("[LeadItemTopology] Client: %s viewed Product: %s exactly %d times in this window", parts[0], parts[1], count));
                 })
-                .filter((Windowed<String> key, Long count) -> count >= viewThreshold)
-                .map((Windowed<String> key, Long value) -> KeyValue.pair(key.key(), value));
+                .map((Windowed<String> key, Long count) -> KeyValue.pair(key.key(), count))
+                .toTable(Materialized.with(Serdes.String(), Serdes.Long()));
 
-        // Join frequentViews and carts within a 5 minute window
-        KStream<String, String> joinedStream = frequentViews.join(
-                cartsRekeyed,
-                (Long count, CartEvent cart) -> "HOT_LEAD",
-                JoinWindows.ofTimeDifferenceWithNoGrace(Duration.ofMinutes(joinWindowMinutes)),
-                StreamJoined.with(Serdes.String(), Serdes.Long(), cartSerde)
-        );
-
-        // Map to LeadItemEvent and send to topic
-        joinedStream.map((String key, String value) -> {
-            String[] parts = key.split("_");
-            Integer clientId = Integer.parseInt(parts[0]);
-            Integer productId = Integer.parseInt(parts[1]);
-            IO.println(String.format("HOT LEAD DETECTED! Client: %d Product: %d", clientId, productId));
-            return KeyValue.pair(String.valueOf(clientId), new LeadItemEvent(clientId, productId));
-        }).to(TopicNames.LEAD_ITEM_EVENTS, Produced.with(Serdes.String(), leadItemSerde));
+        carts
+                .join(
+                        recentViewCounts,
+                        (CartEvent cart, Long viewCount) -> viewCount,
+                        Joined.with(Serdes.String(), cartSerde, Serdes.Long())
+                )
+                .filter((String key, Long viewCount) -> viewCount >= viewThreshold)
+                .map((String key, Long viewCount) -> {
+                    String[] parts = key.split("_");
+                    Integer clientId = Integer.parseInt(parts[0]);
+                    Integer productId = Integer.parseInt(parts[1]);
+                    IO.println(String.format("[LeadItemTopology] HOT LEAD DETECTED! Client: %d Product: %d", clientId, productId));
+                    return KeyValue.pair(String.valueOf(clientId), new LeadItemEvent(clientId, productId));
+                })
+                .to(TopicNames.LEAD_ITEM_EVENTS, Produced.with(Serdes.String(), leadItemSerde));
     }
 }
