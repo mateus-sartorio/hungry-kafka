@@ -56,14 +56,6 @@ public class KafkaTopicConfig {
                 .build();
     }
 
-    // @Bean
-    // public NewTopic orderStatusChangedTopic() {
-    //     return TopicBuilder.name(TopicNames.ORDER_STATUS_CHANGED)
-    //             .partitions(3)
-    //             .replicas(2)
-    //             .build();
-    // }
-
     @Bean
     public NewTopic abandonedCartEventsTopic() {
         return TopicBuilder.name(TopicNames.ABANDONED_CART_EVENTS)
