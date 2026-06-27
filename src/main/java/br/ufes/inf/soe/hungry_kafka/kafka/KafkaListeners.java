@@ -11,7 +11,6 @@ import java.util.Set;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.kafka.annotation.KafkaListener;
-import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -60,10 +59,7 @@ public class KafkaListeners {
     private final ProductRepository productRepository;
     private final ClientCategoryPreferenceRepository clientCategoryPreferenceRepository;
     private final ClientProductPreferenceRepository clientProductPreferenceRepository;
-    private final KafkaTemplate<String, Object> kafkaTemplate;
     private final WebSocketService webSocketService;
-
-
 
     @Value("${app.preference.cart.multiplier:1.05}")
     private Float cartPreferenceMultiplier;
@@ -74,9 +70,8 @@ public class KafkaListeners {
     @Value("${app.preference.order.multiplier:1.01}")
     private Float orderPreferenceMultiplier;
 
-
     public KafkaListeners(OrderRepository orderRepository, OrderItemRepository orderItemRepository, ClientRepository clientRepository, OrderStatusRepository orderStatusRepository, ProductRepository productRepository, ClientCategoryPreferenceRepository clientCategoryPreferenceRepository,
-            ClientProductPreferenceRepository clientProductPreferenceRepository, KafkaTemplate<String, Object> kafkaTemplate, WebSocketService webSocketService) {
+            ClientProductPreferenceRepository clientProductPreferenceRepository, WebSocketService webSocketService) {
         this.orderRepository = orderRepository;
         this.orderItemRepository = orderItemRepository;
         this.clientRepository = clientRepository;
@@ -84,7 +79,6 @@ public class KafkaListeners {
         this.productRepository = productRepository;
         this.clientCategoryPreferenceRepository = clientCategoryPreferenceRepository;
         this.clientProductPreferenceRepository = clientProductPreferenceRepository;
-        this.kafkaTemplate = kafkaTemplate;
         this.webSocketService = webSocketService;
     }
 

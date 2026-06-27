@@ -14,7 +14,6 @@ import org.apache.kafka.streams.kstream.KStream;
 import org.apache.kafka.streams.kstream.KTable;
 import org.apache.kafka.streams.kstream.Materialized;
 import org.apache.kafka.streams.kstream.Produced;
-import org.apache.kafka.streams.kstream.Repartitioned;
 import org.apache.kafka.streams.kstream.Suppressed;
 import org.apache.kafka.streams.kstream.TimeWindows;
 import org.apache.kafka.streams.kstream.Windowed;
@@ -33,16 +32,8 @@ import br.ufes.inf.soe.hungry_kafka.dto.CreateOrderEvent;
 @Component
 public class AbandonedCartTopology {
 
-    @Value("${app.abandoned-cart.window-minutes:15}")
+    @Value("${app.abandoned-cart.window-minutes}")
     private long windowMinutes;
-
-    /**
-     * cart-events (6 partitions) and order (3 partitions) are not co-partitioned,
-     * which a cogroup forbids. Both streams are rekeyed by clientId and therefore
-     * must be repartitioned anyway, so we pin both repartition topics to the same
-     * partition count to make them co-partitioned.
-     */
-    private static final int COPARTITION_PARTITIONS = 6;
 
     @Autowired
     public void buildTopology(StreamsBuilder builder) {
@@ -51,65 +42,49 @@ public class AbandonedCartTopology {
         JacksonJsonSerde<AbandonedCartState> stateSerde = new JacksonJsonSerde<>(AbandonedCartState.class);
         JacksonJsonSerde<AbandonedCartEvent> abandonedSerde = new JacksonJsonSerde<>(AbandonedCartEvent.class);
 
-        // cart-events rekeyed by clientId, then repartitioned to a fixed partition
-        // count so it can be co-partitioned with the order stream below.
-        KStream<String, CartEvent> carts = builder.stream(
+        KStream<String, CartEvent> carts = builder
+            .stream(
                         TopicNames.CART_EVENTS,
-                        Consumed.with(Serdes.String(), cartSerde))
-                .filter((String key, CartEvent value) -> value != null && value.clientId() != null && value.productId() != null && value.action() != null)
-                .selectKey((String key, CartEvent value) -> String.valueOf(value.clientId()))
-                .repartition(Repartitioned.with(Serdes.String(), cartSerde)
-                        .withName("abandoned-cart-carts")
-                        .withNumberOfPartitions(COPARTITION_PARTITIONS));
+                        Consumed.with(Serdes.String(), cartSerde)
+            )
+            .peek((String key, CartEvent value) -> IO.println(String.format("[Topic: cart-events] Received -> Client: %s performed %s on Product: %s", value.clientId(), value.action(), value.productId())))
+            .selectKey((String key, CartEvent value) -> String.valueOf(value.clientId()));
 
-        // order events rekeyed by clientId, repartitioned to the same partition count.
         KStream<String, CreateOrderEvent> orders = builder.stream(
                         TopicNames.ORDER_EVENTS,
                         Consumed.with(Serdes.String(), orderSerde))
-                .filter((String key, CreateOrderEvent value) -> value != null && value.clientId() != null)
-                .selectKey((String key, CreateOrderEvent value) -> String.valueOf(value.clientId()))
-                .repartition(Repartitioned.with(Serdes.String(), orderSerde)
-                        .withName("abandoned-cart-orders")
-                        .withNumberOfPartitions(COPARTITION_PARTITIONS));
+                .peek((String key, CreateOrderEvent value) -> IO.println(String.format("[Topic: order-events] Received -> Client: %s placed order", value.clientId())))    
+                .selectKey((String key, CreateOrderEvent value) -> String.valueOf(value.clientId()));
 
-        // Both streams are already repartitioned and co-partitioned, so groupByKey
-        // adds no further repartition topic.
-        KGroupedStream<String, CartEvent> cartsByClient =
-                carts.groupByKey(Grouped.with(Serdes.String(), cartSerde));
-        KGroupedStream<String, CreateOrderEvent> ordersByClient =
-                orders.groupByKey(Grouped.with(Serdes.String(), orderSerde));
+        KGroupedStream<String, CartEvent> cartsByClient = carts.groupByKey(Grouped.with("abandoned-cart-carts", Serdes.String(), cartSerde));
+        KGroupedStream<String, CreateOrderEvent> ordersByClient = orders.groupByKey(Grouped.with("abandoned-cart-orders", Serdes.String(), orderSerde));
 
-        // Co-group carts and orders per client per window into a single state object
         KTable<Windowed<String>, AbandonedCartState> windowed = cartsByClient
-                .cogroup((String key, CartEvent cart, AbandonedCartState agg) -> applyCart(agg, cart))
-                .cogroup(ordersByClient, (String key, CreateOrderEvent order, AbandonedCartState agg) ->
-                        new AbandonedCartState(agg.productIds(), true))
+                .cogroup((String key, CartEvent cart, AbandonedCartState aggregate) -> applyCart(aggregate, cart))
+                .cogroup(ordersByClient, (String key, CreateOrderEvent order, AbandonedCartState aggregate) -> new AbandonedCartState(aggregate.productIds(), true))
                 .windowedBy(TimeWindows.ofSizeWithNoGrace(Duration.ofMinutes(windowMinutes)))
                 .aggregate(AbandonedCartState::new, Materialized.with(Serdes.String(), stateSerde))
-                // Emit one record per window only after the window closes
                 .suppress(Suppressed.untilWindowCloses(Suppressed.BufferConfig.unbounded()));
 
         windowed.toStream()
-                .peek((Windowed<String> key, AbandonedCartState state) -> System.out.println(String.format(
-                        "[Window closed] Client: %s items-left: %s ordered: %s",
-                        key.key(), state != null ? state.productIds() : "null", state != null && state.ordered())))
-                // Abandoned = items still in cart at window close AND no order placed
-                .filter((Windowed<String> key, AbandonedCartState state) -> state != null && !state.ordered() && !state.productIds().isEmpty())
+                .peek((Windowed<String> key, AbandonedCartState state) -> IO.println(String.format("[Window closed] Client: %s items-left: %s ordered: %s", key.key(), state.productIds(), state.ordered())))
+                .filter((Windowed<String> key, AbandonedCartState state) -> !state.ordered())
                 .map((Windowed<String> key, AbandonedCartState state) -> {
                     Integer clientId = Integer.parseInt(key.key());
                     List<Integer> productIds = new ArrayList<>(state.productIds());
-                    System.out.println(String.format("ABANDONED CART DETECTED! Client: %d forgot products: %s", clientId, productIds));
+                    IO.println(String.format("ABANDONED CART! Client: %d products: %s", clientId, productIds));
                     return KeyValue.pair(key.key(), new AbandonedCartEvent(clientId, productIds));
                 })
                 .to(TopicNames.ABANDONED_CART_EVENTS, Produced.with(Serdes.String(), abandonedSerde));
     }
 
-    private static AbandonedCartState applyCart(AbandonedCartState agg, CartEvent cart) {
+    private static AbandonedCartState applyCart(AbandonedCartState aggregate, CartEvent cart) {
         if (cart.action() == CartAction.ADDED) {
-            agg.productIds().add(cart.productId());
+            aggregate.productIds().add(cart.productId());
         } else if (cart.action() == CartAction.REMOVED) {
-            agg.productIds().remove(cart.productId());
+            aggregate.productIds().remove(cart.productId());
         }
-        return agg;
+
+        return aggregate;
     }
 }

@@ -27,7 +27,7 @@ public class KafkaTopicConfig {
     @Bean
     public NewTopic orderStatusEventsTopic() {
         return TopicBuilder.name(TopicNames.ORDER_STATUS_EVENTS)
-                .partitions(3)
+                .partitions(6)
                 .replicas(2)
                 .build();
     }
@@ -35,7 +35,7 @@ public class KafkaTopicConfig {
     @Bean
     public NewTopic orderEventsTopic() {
         return TopicBuilder.name(TopicNames.ORDER_EVENTS)
-                .partitions(3)
+                .partitions(6)
                 .replicas(2)
                 .build();
     }
@@ -43,7 +43,7 @@ public class KafkaTopicConfig {
     @Bean
     public NewTopic leadItemEventsTopic() {
         return TopicBuilder.name(TopicNames.LEAD_ITEM_EVENTS)
-                .partitions(3)
+                .partitions(6)
                 .replicas(1)
                 .build();
     }
@@ -51,7 +51,7 @@ public class KafkaTopicConfig {
     @Bean
     public NewTopic hotItemEventsTopic() {
         return TopicBuilder.name(TopicNames.HOT_ITEM_EVENTS)
-                .partitions(3)
+                .partitions(6)
                 .replicas(1)
                 .build();
     }
@@ -59,7 +59,7 @@ public class KafkaTopicConfig {
     @Bean
     public NewTopic abandonedCartEventsTopic() {
         return TopicBuilder.name(TopicNames.ABANDONED_CART_EVENTS)
-                .partitions(3)
+                .partitions(6)
                 .replicas(1)
                 .build();
     }

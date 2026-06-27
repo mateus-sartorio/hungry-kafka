@@ -54,6 +54,12 @@ app:
   hot-item:
     threshold: 10
     window-minutes: 1
+    duration-seconds: 15
+
+  # Hot Lead Detection Configuration
+  hot-lead:
+    join-window-minutes: 5
+    view-threshold: 5
 
   # Abandoned Cart Detection Configuration
   abandoned-cart:
