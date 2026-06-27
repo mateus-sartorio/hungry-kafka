@@ -1,24 +1,30 @@
 package br.ufes.inf.soe.hungry_kafka.kafka;
 
-import br.ufes.inf.soe.hungry_kafka.config.TopicNames;
-import br.ufes.inf.soe.hungry_kafka.dto.CartAction;
-import br.ufes.inf.soe.hungry_kafka.dto.CartEvent;
-import br.ufes.inf.soe.hungry_kafka.dto.CreateOrderRequest;
-import br.ufes.inf.soe.hungry_kafka.dto.HotItemEvent;
-import br.ufes.inf.soe.hungry_kafka.dto.ItemViewEvent;
-import br.ufes.inf.soe.hungry_kafka.dto.OrderItemInput;
+import java.time.Duration;
+import java.util.ArrayList;
+import java.util.List;
+
 import org.apache.kafka.common.serialization.Serdes;
 import org.apache.kafka.streams.KeyValue;
 import org.apache.kafka.streams.StreamsBuilder;
-import org.apache.kafka.streams.kstream.*;
+import org.apache.kafka.streams.kstream.Consumed;
+import org.apache.kafka.streams.kstream.Grouped;
+import org.apache.kafka.streams.kstream.KStream;
+import org.apache.kafka.streams.kstream.Produced;
+import org.apache.kafka.streams.kstream.TimeWindows;
+import org.apache.kafka.streams.kstream.Windowed;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.kafka.support.serializer.JacksonJsonSerde;
 import org.springframework.stereotype.Component;
 
-import java.time.Duration;
-import java.util.ArrayList;
-import java.util.List;
+import br.ufes.inf.soe.hungry_kafka.config.TopicNames;
+import br.ufes.inf.soe.hungry_kafka.dto.CartAction;
+import br.ufes.inf.soe.hungry_kafka.dto.CartEvent;
+import br.ufes.inf.soe.hungry_kafka.dto.CreateOrderEvent;
+import br.ufes.inf.soe.hungry_kafka.dto.HotItemEvent;
+import br.ufes.inf.soe.hungry_kafka.dto.ItemViewEvent;
+import br.ufes.inf.soe.hungry_kafka.dto.OrderItemInput;
 
 @Component
 public class HotItemTopology {
@@ -33,7 +39,7 @@ public class HotItemTopology {
     public void buildTopology(StreamsBuilder builder) {
         JacksonJsonSerde<ItemViewEvent> viewSerde = new JacksonJsonSerde<>(ItemViewEvent.class);
         JacksonJsonSerde<CartEvent> cartSerde = new JacksonJsonSerde<>(CartEvent.class);
-        JacksonJsonSerde<CreateOrderRequest> orderSerde = new JacksonJsonSerde<>(CreateOrderRequest.class);
+        JacksonJsonSerde<CreateOrderEvent> orderSerde = new JacksonJsonSerde<>(CreateOrderEvent.class);
         JacksonJsonSerde<HotItemEvent> hotItemSerde = new JacksonJsonSerde<>(HotItemEvent.class);
 
         KStream<String, String> views = builder.stream(
@@ -50,7 +56,7 @@ public class HotItemTopology {
         KStream<String, String> purchases = builder.stream(
                         TopicNames.ORDER_EVENTS,
                         Consumed.with(Serdes.String(), orderSerde))
-                .flatMap((String key, CreateOrderRequest order) -> {
+                .flatMap((String key, CreateOrderEvent order) -> {
                     List<KeyValue<String, String>> interactions = new ArrayList<>();
 
                     for (OrderItemInput item : order.items()) {

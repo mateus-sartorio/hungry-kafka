@@ -20,7 +20,17 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 
 import br.ufes.inf.soe.hungry_kafka.config.TopicNames;
-import br.ufes.inf.soe.hungry_kafka.dto.*;
+import br.ufes.inf.soe.hungry_kafka.dto.AbandonedCartEvent;
+import br.ufes.inf.soe.hungry_kafka.dto.CartEvent;
+import br.ufes.inf.soe.hungry_kafka.dto.ClientDto;
+import br.ufes.inf.soe.hungry_kafka.dto.ClientOrderResponse;
+import br.ufes.inf.soe.hungry_kafka.dto.HotItemEvent;
+import br.ufes.inf.soe.hungry_kafka.dto.ItemViewEvent;
+import br.ufes.inf.soe.hungry_kafka.dto.LeadItemEvent;
+import br.ufes.inf.soe.hungry_kafka.dto.OrderItemResponse;
+import br.ufes.inf.soe.hungry_kafka.dto.ProductResponse;
+import br.ufes.inf.soe.hungry_kafka.dto.StoreOrderResponse;
+import br.ufes.inf.soe.hungry_kafka.dto.UpdateOrderStatusEvent;
 import br.ufes.inf.soe.hungry_kafka.entity.Client;
 import br.ufes.inf.soe.hungry_kafka.entity.ClientCategoryPreference;
 import br.ufes.inf.soe.hungry_kafka.entity.ClientCategoryPreferenceId;
@@ -235,10 +245,10 @@ public class KafkaListeners {
 
     @KafkaListener(topics = TopicNames.ORDER_STATUS_EVENTS, groupId = "hungry-kafka-group")
     @Transactional
-    public void handleOrderStatusEvent(ConsumerRecord<String, String> record) {
-        OrderStatusEvent event;
+    public void handleUpdateOrderStatusEvent(ConsumerRecord<String, String> record) {
+        UpdateOrderStatusEvent event;
         try {
-            event = objectMapper.readValue(record.value(), OrderStatusEvent.class);
+            event = objectMapper.readValue(record.value(), UpdateOrderStatusEvent.class);
         } catch (JsonProcessingException e) {
             return;
         }
@@ -285,14 +295,6 @@ public class KafkaListeners {
 
         StoreOrderResponse storeOrderResponse = toStoreResponse(order);
         ClientOrderResponse orderResponse = toResponse(order);
-
-        kafkaTemplate.send(TopicNames.ORDER_STATUS_CHANGED, String.valueOf(orderId), storeOrderResponse);
-
-        Integer clientId = order.getClient() != null ? order.getClient().getId() : null;
-        if (clientId != null) {
-            String clientTopic = TopicNames.ORDER_STATUS_CHANGED + "-" + clientId;
-            kafkaTemplate.send(clientTopic, String.valueOf(orderId), orderResponse);
-        }
 
         webSocketService.sendOrderUpdate(orderId, orderResponse, storeOrderResponse);
     }

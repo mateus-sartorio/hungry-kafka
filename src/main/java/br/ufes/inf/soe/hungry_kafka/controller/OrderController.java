@@ -1,5 +1,14 @@
 package br.ufes.inf.soe.hungry_kafka.controller;
 
+import java.time.Instant;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import java.util.stream.Collectors;
+
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -25,7 +34,7 @@ import br.ufes.inf.soe.hungry_kafka.entity.OrderEntity;
 import br.ufes.inf.soe.hungry_kafka.entity.OrderItem;
 import br.ufes.inf.soe.hungry_kafka.entity.OrderStatusEntity;
 import br.ufes.inf.soe.hungry_kafka.entity.Product;
-
+import br.ufes.inf.soe.hungry_kafka.producer.EventProducer;
 import br.ufes.inf.soe.hungry_kafka.repository.ClientCategoryPreferenceRepository;
 import br.ufes.inf.soe.hungry_kafka.repository.ClientProductPreferenceRepository;
 import br.ufes.inf.soe.hungry_kafka.repository.ClientRepository;
@@ -33,17 +42,7 @@ import br.ufes.inf.soe.hungry_kafka.repository.OrderItemRepository;
 import br.ufes.inf.soe.hungry_kafka.repository.OrderRepository;
 import br.ufes.inf.soe.hungry_kafka.repository.OrderStatusRepository;
 import br.ufes.inf.soe.hungry_kafka.repository.ProductRepository;
-import br.ufes.inf.soe.hungry_kafka.producer.EventProducer;
 import br.ufes.inf.soe.hungry_kafka.websocket.WebSocketService;
-
-import java.time.Instant;
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
-import java.util.stream.Collectors;
 
 @RestController
 @RequestMapping("/api/orders")
@@ -185,7 +184,7 @@ public class OrderController {
 
         webSocketService.sendOrderUpdate(saved.getId(), toClientResponse(saved), toStoreResponse(saved));
 
-        eventProducer.sendOrder(request);
+        eventProducer.sendOrder(request.toEvent());
 
         return ResponseEntity.ok().build();
     }

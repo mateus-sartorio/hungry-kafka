@@ -7,7 +7,7 @@ import org.springframework.stereotype.Controller;
 import br.ufes.inf.soe.hungry_kafka.config.TopicNames;
 import br.ufes.inf.soe.hungry_kafka.dto.CartEvent;
 import br.ufes.inf.soe.hungry_kafka.dto.ItemViewEvent;
-import br.ufes.inf.soe.hungry_kafka.dto.OrderStatusEvent;
+import br.ufes.inf.soe.hungry_kafka.dto.UpdateOrderStatusEvent;
 
 @Controller
 public class WebSocketEventController {
@@ -29,7 +29,7 @@ public class WebSocketEventController {
     }
 
     @MessageMapping("/order-status")
-    public void handleOrderStatusEvent(OrderStatusEvent event) {
+    public void handleUpdateOrderStatusEvent(UpdateOrderStatusEvent event) {
         kafkaTemplate.send(TopicNames.ORDER_STATUS_EVENTS, event.orderId(), event);
     }
 

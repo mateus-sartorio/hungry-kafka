@@ -3,7 +3,7 @@ package br.ufes.inf.soe.hungry_kafka.dto;
 import java.time.Duration;
 import java.time.Instant;
 
-public record OrderStatusEvent(
+public record UpdateOrderStatusEvent(
         String eventId,
         String orderId,
         String userId,

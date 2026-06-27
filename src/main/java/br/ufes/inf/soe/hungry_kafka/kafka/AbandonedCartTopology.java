@@ -1,23 +1,34 @@
 package br.ufes.inf.soe.hungry_kafka.kafka;
 
-import br.ufes.inf.soe.hungry_kafka.config.TopicNames;
-import br.ufes.inf.soe.hungry_kafka.dto.AbandonedCartEvent;
-import br.ufes.inf.soe.hungry_kafka.dto.AbandonedCartState;
-import br.ufes.inf.soe.hungry_kafka.dto.CartAction;
-import br.ufes.inf.soe.hungry_kafka.dto.CartEvent;
-import br.ufes.inf.soe.hungry_kafka.dto.CreateOrderRequest;
+import java.time.Duration;
+import java.util.ArrayList;
+import java.util.List;
+
 import org.apache.kafka.common.serialization.Serdes;
 import org.apache.kafka.streams.KeyValue;
 import org.apache.kafka.streams.StreamsBuilder;
-import org.apache.kafka.streams.kstream.*;
+import org.apache.kafka.streams.kstream.Consumed;
+import org.apache.kafka.streams.kstream.Grouped;
+import org.apache.kafka.streams.kstream.KGroupedStream;
+import org.apache.kafka.streams.kstream.KStream;
+import org.apache.kafka.streams.kstream.KTable;
+import org.apache.kafka.streams.kstream.Materialized;
+import org.apache.kafka.streams.kstream.Produced;
+import org.apache.kafka.streams.kstream.Repartitioned;
+import org.apache.kafka.streams.kstream.Suppressed;
+import org.apache.kafka.streams.kstream.TimeWindows;
+import org.apache.kafka.streams.kstream.Windowed;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.kafka.support.serializer.JacksonJsonSerde;
 import org.springframework.stereotype.Component;
 
-import java.time.Duration;
-import java.util.ArrayList;
-import java.util.List;
+import br.ufes.inf.soe.hungry_kafka.config.TopicNames;
+import br.ufes.inf.soe.hungry_kafka.dto.AbandonedCartEvent;
+import br.ufes.inf.soe.hungry_kafka.dto.AbandonedCartState;
+import br.ufes.inf.soe.hungry_kafka.dto.CartAction;
+import br.ufes.inf.soe.hungry_kafka.dto.CartEvent;
+import br.ufes.inf.soe.hungry_kafka.dto.CreateOrderEvent;
 
 @Component
 public class AbandonedCartTopology {
@@ -36,7 +47,7 @@ public class AbandonedCartTopology {
     @Autowired
     public void buildTopology(StreamsBuilder builder) {
         JacksonJsonSerde<CartEvent> cartSerde = new JacksonJsonSerde<>(CartEvent.class);
-        JacksonJsonSerde<CreateOrderRequest> orderSerde = new JacksonJsonSerde<>(CreateOrderRequest.class);
+        JacksonJsonSerde<CreateOrderEvent> orderSerde = new JacksonJsonSerde<>(CreateOrderEvent.class);
         JacksonJsonSerde<AbandonedCartState> stateSerde = new JacksonJsonSerde<>(AbandonedCartState.class);
         JacksonJsonSerde<AbandonedCartEvent> abandonedSerde = new JacksonJsonSerde<>(AbandonedCartEvent.class);
 
@@ -52,11 +63,11 @@ public class AbandonedCartTopology {
                         .withNumberOfPartitions(COPARTITION_PARTITIONS));
 
         // order events rekeyed by clientId, repartitioned to the same partition count.
-        KStream<String, CreateOrderRequest> orders = builder.stream(
+        KStream<String, CreateOrderEvent> orders = builder.stream(
                         TopicNames.ORDER_EVENTS,
                         Consumed.with(Serdes.String(), orderSerde))
-                .filter((String key, CreateOrderRequest value) -> value != null && value.clientId() != null)
-                .selectKey((String key, CreateOrderRequest value) -> String.valueOf(value.clientId()))
+                .filter((String key, CreateOrderEvent value) -> value != null && value.clientId() != null)
+                .selectKey((String key, CreateOrderEvent value) -> String.valueOf(value.clientId()))
                 .repartition(Repartitioned.with(Serdes.String(), orderSerde)
                         .withName("abandoned-cart-orders")
                         .withNumberOfPartitions(COPARTITION_PARTITIONS));
@@ -65,13 +76,13 @@ public class AbandonedCartTopology {
         // adds no further repartition topic.
         KGroupedStream<String, CartEvent> cartsByClient =
                 carts.groupByKey(Grouped.with(Serdes.String(), cartSerde));
-        KGroupedStream<String, CreateOrderRequest> ordersByClient =
+        KGroupedStream<String, CreateOrderEvent> ordersByClient =
                 orders.groupByKey(Grouped.with(Serdes.String(), orderSerde));
 
         // Co-group carts and orders per client per window into a single state object
         KTable<Windowed<String>, AbandonedCartState> windowed = cartsByClient
                 .cogroup((String key, CartEvent cart, AbandonedCartState agg) -> applyCart(agg, cart))
-                .cogroup(ordersByClient, (String key, CreateOrderRequest order, AbandonedCartState agg) ->
+                .cogroup(ordersByClient, (String key, CreateOrderEvent order, AbandonedCartState agg) ->
                         new AbandonedCartState(agg.productIds(), true))
                 .windowedBy(TimeWindows.ofSizeWithNoGrace(Duration.ofMinutes(windowMinutes)))
                 .aggregate(AbandonedCartState::new, Materialized.with(Serdes.String(), stateSerde))
