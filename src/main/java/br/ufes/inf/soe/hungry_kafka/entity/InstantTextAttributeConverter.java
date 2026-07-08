@@ -1,9 +1,9 @@
 package br.ufes.inf.soe.hungry_kafka.entity;
 
+import java.time.Instant;
+
 import jakarta.persistence.AttributeConverter;
 import jakarta.persistence.Converter;
-
-import java.time.Instant;
 
 @Converter
 public class InstantTextAttributeConverter implements AttributeConverter<Instant, String> {

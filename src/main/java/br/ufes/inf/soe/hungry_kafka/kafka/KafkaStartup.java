@@ -1,6 +1,7 @@
 package br.ufes.inf.soe.hungry_kafka.kafka;
 
 import java.util.Map;
+import java.util.concurrent.ExecutionException;
 
 import org.apache.kafka.clients.admin.AdminClient;
 import org.apache.kafka.clients.admin.AdminClientConfig;
@@ -12,8 +13,14 @@ import org.springframework.stereotype.Component;
 @Component
 public class KafkaStartup {
 
-    @Value("${spring.kafka.bootstrap-servers:localhost:9092}")
+    @Value("${spring.kafka.bootstrap-servers}")
     private String bootstrapServers;
+
+    @Value("${app.kafka.startup.max-retries}")
+    private int maxRetries;
+
+    @Value("${app.kafka.startup.retry-delay-ms}")
+    private long retryDelayMs;
 
     @EventListener(ApplicationReadyEvent.class)
     public void onApplicationReady() {
@@ -22,13 +29,13 @@ public class KafkaStartup {
         Map<String, Object> config = Map.of(AdminClientConfig.BOOTSTRAP_SERVERS_CONFIG, bootstrapServers);
 
         try (AdminClient admin = AdminClient.create(config)) {
-            for (int i = 0; i < 20; i++) {
+            for (int i = 0; i < maxRetries; i++) {
                 try {
                     admin.describeCluster().nodes().get();
                     IO.println("Kafka is available at " + bootstrapServers);
                     return;
-                } catch (Exception e) {
-                    Thread.sleep(1000);
+                } catch (InterruptedException | ExecutionException e) {
+                    Thread.sleep(retryDelayMs);
                 }
             }
         } catch (Exception e) {

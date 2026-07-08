@@ -50,12 +50,6 @@ public class OrderController {
 
     private static final String INITIAL_STATUS_NAME = "CREATED";
 
-    @Value("${app.preference.cart.multiplier:1.05}")
-    private Float cartPreferenceMultiplier;
-
-    @Value("${app.preference.itemview.multiplier:1.01}")
-    private Float itemviewPreferenceMultiplier;
-
     @Value("${app.preference.order.multiplier:1.01}")
     private Float orderPreferenceMultiplier;
 

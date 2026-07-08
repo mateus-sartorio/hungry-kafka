@@ -1,8 +1,14 @@
 package br.ufes.inf.soe.hungry_kafka.controller;
 
+import java.util.AbstractMap.SimpleEntry;
+import java.util.Collections;
+import java.util.List;
+import java.util.Map;
+import java.util.stream.Collectors;
+
 import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 import br.ufes.inf.soe.hungry_kafka.dto.ProductResponse;
@@ -12,12 +18,6 @@ import br.ufes.inf.soe.hungry_kafka.entity.ClientProductPreference;
 import br.ufes.inf.soe.hungry_kafka.entity.Product;
 import br.ufes.inf.soe.hungry_kafka.repository.ClientRepository;
 import br.ufes.inf.soe.hungry_kafka.repository.ProductRepository;
-
-import java.util.List;
-import java.util.Map;
-import java.util.stream.Collectors;
-import java.util.AbstractMap.SimpleEntry;
-import java.util.Collections;
 
 @RestController
 @RequestMapping("/products")

@@ -41,6 +41,11 @@ logging:
 
 # Application Configuration
 app:
+  kafka:
+    startup:
+      max-retries: 20
+      retry-delay-ms: 1000
+
   # Preference Multipliers
   preference:
     cart:

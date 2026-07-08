@@ -70,7 +70,7 @@ public class AbandonedCartTopology {
                 .peek((Windowed<String> key, AbandonedCartState state) -> IO.println(String.format("[AbandonedCartTopology] Window closed, client: %s items-left: %s ordered: %s", key.key(), state.productIds(), state.ordered())))
                 .filter((Windowed<String> key, AbandonedCartState state) -> !state.ordered())
                 .map((Windowed<String> key, AbandonedCartState state) -> {
-                    Integer clientId = Integer.parseInt(key.key());
+                    Integer clientId = Integer.valueOf(key.key());
                     List<Integer> productIds = new ArrayList<>(state.productIds());
                     IO.println(String.format("[AbandonedCartTopology] ABANDONED CART! Client: %d products: %s", clientId, productIds));
                     return KeyValue.pair(key.key(), new AbandonedCartEvent(clientId, productIds));

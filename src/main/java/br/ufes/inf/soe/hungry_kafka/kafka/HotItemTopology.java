@@ -77,7 +77,7 @@ public class HotItemTopology {
                 .peek((Windowed<String> key, Long count) -> IO.println(String.format("[HotItemTopology] Product: %s has %d interactions in this window", key.key(), count)))
                 .filter((Windowed<String> key, Long count) -> count >= threshold)
                 .map((Windowed<String> key, Long count) -> {
-                    Integer productId = Integer.parseInt(key.key());
+                    Integer productId = Integer.valueOf(key.key());
                     IO.println(String.format("[HotItemTopology] HOT ITEM DETECTED! Product: %d (%d interactions in the last %d min)", productId, count, windowMinutes));
                     return KeyValue.pair(key.key(), new HotItemEvent(productId));
                 });

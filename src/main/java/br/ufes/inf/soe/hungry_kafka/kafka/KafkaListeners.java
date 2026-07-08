@@ -47,7 +47,9 @@ import br.ufes.inf.soe.hungry_kafka.repository.OrderRepository;
 import br.ufes.inf.soe.hungry_kafka.repository.OrderStatusRepository;
 import br.ufes.inf.soe.hungry_kafka.repository.ProductRepository;
 import br.ufes.inf.soe.hungry_kafka.websocket.WebSocketService;
+import lombok.extern.slf4j.Slf4j;
 
+@Slf4j
 @Component
 public class KafkaListeners {
 
@@ -61,14 +63,11 @@ public class KafkaListeners {
     private final ClientProductPreferenceRepository clientProductPreferenceRepository;
     private final WebSocketService webSocketService;
 
-    @Value("${app.preference.cart.multiplier:1.05}")
+    @Value("${app.preference.cart.multiplier}")
     private Float cartPreferenceMultiplier;
 
-    @Value("${app.preference.itemview.multiplier:1.01}")
+    @Value("${app.preference.itemview.multiplier}")
     private Float itemviewPreferenceMultiplier;
-
-    @Value("${app.preference.order.multiplier:1.01}")
-    private Float orderPreferenceMultiplier;
 
     public KafkaListeners(OrderRepository orderRepository, OrderItemRepository orderItemRepository, ClientRepository clientRepository, OrderStatusRepository orderStatusRepository, ProductRepository productRepository, ClientCategoryPreferenceRepository clientCategoryPreferenceRepository,
             ClientProductPreferenceRepository clientProductPreferenceRepository, WebSocketService webSocketService) {
@@ -88,7 +87,7 @@ public class KafkaListeners {
             LeadItemEvent event = objectMapper.readValue(record.value(), LeadItemEvent.class);
             webSocketService.sendLeadItemAlert(event);
         } catch (JsonProcessingException e) {
-            e.printStackTrace();
+            log.error("Failed to deserialize LeadItemEvent from record: {}", record.value(), e);
         }
     }
 
@@ -98,7 +97,7 @@ public class KafkaListeners {
             HotItemEvent event = objectMapper.readValue(record.value(), HotItemEvent.class);
             webSocketService.sendHotItemAlert(event);
         } catch (JsonProcessingException e) {
-            e.printStackTrace();
+            log.error("Failed to deserialize HotItemEvent from record: {}", record.value(), e);
         }
     }
 
@@ -108,7 +107,7 @@ public class KafkaListeners {
             AbandonedCartEvent event = objectMapper.readValue(record.value(), AbandonedCartEvent.class);
             webSocketService.sendAbandonedCartAlert(event);
         } catch (JsonProcessingException e) {
-            e.printStackTrace();
+            log.error("Failed to deserialize AbandonedCartEvent from record: {}", record.value(), e);
         }
     }
 
@@ -179,7 +178,7 @@ public class KafkaListeners {
         try {
             event = objectMapper.readValue(record.value(), CartEvent.class);
         } catch (JsonProcessingException e) {
-            e.printStackTrace();
+            log.error("Failed to deserialize CartEvent from record: {}", record.value(), e);
             return;
         }
 
