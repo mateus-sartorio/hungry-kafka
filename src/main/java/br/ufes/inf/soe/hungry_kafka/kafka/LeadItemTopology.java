@@ -1,21 +1,29 @@
 package br.ufes.inf.soe.hungry_kafka.kafka;
 
-import br.ufes.inf.soe.hungry_kafka.config.TopicNames;
-import br.ufes.inf.soe.hungry_kafka.dto.CartAction;
-import br.ufes.inf.soe.hungry_kafka.dto.CartEvent;
-import br.ufes.inf.soe.hungry_kafka.dto.ItemViewEvent;
-import br.ufes.inf.soe.hungry_kafka.dto.LeadItemEvent;
+import java.time.Duration;
 
 import org.apache.kafka.common.serialization.Serdes;
 import org.apache.kafka.streams.KeyValue;
 import org.apache.kafka.streams.StreamsBuilder;
-import org.apache.kafka.streams.kstream.*;
+import org.apache.kafka.streams.kstream.Consumed;
+import org.apache.kafka.streams.kstream.Grouped;
+import org.apache.kafka.streams.kstream.Joined;
+import org.apache.kafka.streams.kstream.KStream;
+import org.apache.kafka.streams.kstream.KTable;
+import org.apache.kafka.streams.kstream.Materialized;
+import org.apache.kafka.streams.kstream.Produced;
+import org.apache.kafka.streams.kstream.TimeWindows;
+import org.apache.kafka.streams.kstream.Windowed;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.kafka.support.serializer.JacksonJsonSerde;
 import org.springframework.stereotype.Component;
 
-import java.time.Duration;
+import br.ufes.inf.soe.hungry_kafka.config.TopicNames;
+import br.ufes.inf.soe.hungry_kafka.dto.CartAction;
+import br.ufes.inf.soe.hungry_kafka.dto.CartEvent;
+import br.ufes.inf.soe.hungry_kafka.dto.ItemViewEvent;
+import br.ufes.inf.soe.hungry_kafka.dto.LeadItemEvent;
 
 @Component
 public class LeadItemTopology {
@@ -70,8 +78,8 @@ public class LeadItemTopology {
                 .filter((String key, Long viewCount) -> viewCount >= viewThreshold)
                 .map((String key, Long viewCount) -> {
                     String[] parts = key.split("_");
-                    Integer clientId = Integer.parseInt(parts[0]);
-                    Integer productId = Integer.parseInt(parts[1]);
+                    Integer clientId = Integer.valueOf(parts[0]);
+                    Integer productId = Integer.valueOf(parts[1]);
                     IO.println(String.format("[LeadItemTopology] HOT LEAD DETECTED! Client: %d Product: %d", clientId, productId));
                     return KeyValue.pair(String.valueOf(clientId), new LeadItemEvent(clientId, productId));
                 })
