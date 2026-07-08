@@ -35,7 +35,7 @@ public class KafkaStartup {
                     IO.println("Kafka is available at " + bootstrapServers);
                     return;
                 } catch (InterruptedException | ExecutionException e) {
-                    Thread.sleep(retryDelayMs);
+                    delayBeforeRetry();
                 }
             }
         } catch (Exception e) {
@@ -43,5 +43,13 @@ public class KafkaStartup {
         }
 
         IO.println("Timed out waiting for Kafka at " + bootstrapServers + ".");
+    }
+
+    private void delayBeforeRetry() {
+        try {
+            Thread.sleep(retryDelayMs);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+        }
     }
 }
