@@ -66,7 +66,7 @@ public class LeadItemTopology {
                     String[] parts = key.key().split("_");
                     IO.println(String.format("[LeadItemTopology] Client: %s viewed Product: %s exactly %d times in this window", parts[0], parts[1], count));
                 })
-                .map((Windowed<String> key, Long count) -> KeyValue.pair(key.key(), count))
+                .selectKey((key, count) -> key.key())
                 .toTable(Materialized.with(Serdes.String(), Serdes.Long()));
 
         carts
