@@ -1,0 +1,346 @@
+package br.ufes.inf.soe.hungry_kafka.kafka;
+
+import java.time.Instant;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+
+import org.apache.kafka.clients.consumer.ConsumerRecord;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.kafka.annotation.KafkaListener;
+import org.springframework.stereotype.Component;
+import org.springframework.transaction.annotation.Transactional;
+
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
+
+import br.ufes.inf.soe.hungry_kafka.config.TopicNames;
+import br.ufes.inf.soe.hungry_kafka.dto.AbandonedCartEvent;
+import br.ufes.inf.soe.hungry_kafka.dto.CartEvent;
+import br.ufes.inf.soe.hungry_kafka.dto.ClientDto;
+import br.ufes.inf.soe.hungry_kafka.dto.ClientOrderResponse;
+import br.ufes.inf.soe.hungry_kafka.dto.HotItemEvent;
+import br.ufes.inf.soe.hungry_kafka.dto.ItemViewEvent;
+import br.ufes.inf.soe.hungry_kafka.dto.LeadItemEvent;
+import br.ufes.inf.soe.hungry_kafka.dto.OrderItemResponse;
+import br.ufes.inf.soe.hungry_kafka.dto.ProductResponse;
+import br.ufes.inf.soe.hungry_kafka.dto.StoreOrderResponse;
+import br.ufes.inf.soe.hungry_kafka.dto.UpdateOrderStatusEvent;
+import br.ufes.inf.soe.hungry_kafka.entity.Client;
+import br.ufes.inf.soe.hungry_kafka.entity.ClientCategoryPreference;
+import br.ufes.inf.soe.hungry_kafka.entity.ClientCategoryPreferenceId;
+import br.ufes.inf.soe.hungry_kafka.entity.ClientProductPreference;
+import br.ufes.inf.soe.hungry_kafka.entity.ClientProductPreferenceId;
+import br.ufes.inf.soe.hungry_kafka.entity.OrderEntity;
+import br.ufes.inf.soe.hungry_kafka.entity.OrderItem;
+import br.ufes.inf.soe.hungry_kafka.entity.OrderStatusEntity;
+import br.ufes.inf.soe.hungry_kafka.entity.Product;
+import br.ufes.inf.soe.hungry_kafka.repository.ClientCategoryPreferenceRepository;
+import br.ufes.inf.soe.hungry_kafka.repository.ClientProductPreferenceRepository;
+import br.ufes.inf.soe.hungry_kafka.repository.ClientRepository;
+import br.ufes.inf.soe.hungry_kafka.repository.OrderItemRepository;
+import br.ufes.inf.soe.hungry_kafka.repository.OrderRepository;
+import br.ufes.inf.soe.hungry_kafka.repository.OrderStatusRepository;
+import br.ufes.inf.soe.hungry_kafka.repository.ProductRepository;
+import br.ufes.inf.soe.hungry_kafka.websocket.WebSocketService;
+import lombok.extern.slf4j.Slf4j;
+
+@Slf4j
+@Component
+public class KafkaListeners {
+
+    private final ObjectMapper objectMapper = new ObjectMapper().registerModule(new JavaTimeModule());
+    private final OrderRepository orderRepository;
+    private final OrderItemRepository orderItemRepository;
+    private final ClientRepository clientRepository;
+    private final OrderStatusRepository orderStatusRepository;
+    private final ProductRepository productRepository;
+    private final ClientCategoryPreferenceRepository clientCategoryPreferenceRepository;
+    private final ClientProductPreferenceRepository clientProductPreferenceRepository;
+    private final WebSocketService webSocketService;
+
+    @Value("${app.preference.cart.multiplier}")
+    private Float cartPreferenceMultiplier;
+
+    @Value("${app.preference.itemview.multiplier}")
+    private Float itemviewPreferenceMultiplier;
+
+    public KafkaListeners(OrderRepository orderRepository, OrderItemRepository orderItemRepository, ClientRepository clientRepository, OrderStatusRepository orderStatusRepository, ProductRepository productRepository, ClientCategoryPreferenceRepository clientCategoryPreferenceRepository,
+            ClientProductPreferenceRepository clientProductPreferenceRepository, WebSocketService webSocketService) {
+        this.orderRepository = orderRepository;
+        this.orderItemRepository = orderItemRepository;
+        this.clientRepository = clientRepository;
+        this.orderStatusRepository = orderStatusRepository;
+        this.productRepository = productRepository;
+        this.clientCategoryPreferenceRepository = clientCategoryPreferenceRepository;
+        this.clientProductPreferenceRepository = clientProductPreferenceRepository;
+        this.webSocketService = webSocketService;
+    }
+
+    @KafkaListener(topics = TopicNames.LEAD_ITEM_EVENTS, groupId = "hungry-kafka-group")
+    public void handleLeadItemEvent(ConsumerRecord<String, String> record) {
+        try {
+            LeadItemEvent event = objectMapper.readValue(record.value(), LeadItemEvent.class);
+            webSocketService.sendLeadItemAlert(event);
+        } catch (JsonProcessingException e) {
+            log.error("Failed to deserialize LeadItemEvent from record: {}", record.value(), e);
+        }
+    }
+
+    @KafkaListener(topics = TopicNames.HOT_ITEM_EVENTS, groupId = "hungry-kafka-group")
+    public void handleHotItemEvent(ConsumerRecord<String, String> record) {
+        try {
+            HotItemEvent event = objectMapper.readValue(record.value(), HotItemEvent.class);
+            webSocketService.sendHotItemAlert(event);
+        } catch (JsonProcessingException e) {
+            log.error("Failed to deserialize HotItemEvent from record: {}", record.value(), e);
+        }
+    }
+
+    @KafkaListener(topics = TopicNames.ABANDONED_CART_EVENTS, groupId = "hungry-kafka-group")
+    public void handleAbandonedCartEvent(ConsumerRecord<String, String> record) {
+        try {
+            AbandonedCartEvent event = objectMapper.readValue(record.value(), AbandonedCartEvent.class);
+            webSocketService.sendAbandonedCartAlert(event);
+        } catch (JsonProcessingException e) {
+            log.error("Failed to deserialize AbandonedCartEvent from record: {}", record.value(), e);
+        }
+    }
+
+    @KafkaListener(topics = TopicNames.ITEM_VIEW_EVENTS, groupId = "hungry-kafka-group")
+    @Transactional
+    public void handleItemView(ConsumerRecord<String, String> record) {
+        ItemViewEvent event;
+        try {
+            event = objectMapper.readValue(record.value(), ItemViewEvent.class);
+        } catch (JsonProcessingException e) {
+            return;
+        }
+
+        Client client = clientRepository.findById(event.clientId()).orElse(null);
+        if (client == null) {
+            return;
+        }
+
+        Product product = productRepository.findById(event.productId()).orElse(null);
+        if (product == null) {
+            return;
+        }
+
+        Integer categoryId = product.getCategory() != null ? product.getCategory().getId() : null;
+        if (categoryId == null) {
+            return;
+        }
+
+        ClientCategoryPreferenceId categoryPrefId = new ClientCategoryPreferenceId(event.clientId(), categoryId);
+        ClientCategoryPreference categoryPreference = clientCategoryPreferenceRepository.findById(categoryPrefId).orElse(null);
+
+        if (categoryPreference == null) {
+            categoryPreference = new ClientCategoryPreference();
+            categoryPreference.setId(categoryPrefId);
+            categoryPreference.setClient(client);
+            categoryPreference.setValue(itemviewPreferenceMultiplier);
+            categoryPreference.setUpdatedAt(Instant.now());
+            clientCategoryPreferenceRepository.save(categoryPreference);
+        } else {
+            Float newValue = categoryPreference.getValue() * itemviewPreferenceMultiplier;
+            categoryPreference.setValue(newValue);
+            categoryPreference.setUpdatedAt(Instant.now());
+            clientCategoryPreferenceRepository.save(categoryPreference);
+        }
+
+        ClientProductPreferenceId productPrefId = new ClientProductPreferenceId(event.clientId(), event.productId());
+        ClientProductPreference productPreference = clientProductPreferenceRepository.findById(productPrefId).orElse(null);
+
+        if (productPreference == null) {
+            productPreference = new ClientProductPreference();
+            productPreference.setId(productPrefId);
+            productPreference.setClient(client);
+            productPreference.setValue(itemviewPreferenceMultiplier);
+            productPreference.setUpdatedAt(Instant.now());
+            clientProductPreferenceRepository.save(productPreference);
+        } else {
+            Float newValue = productPreference.getValue() * itemviewPreferenceMultiplier;
+            productPreference.setValue(newValue);
+            productPreference.setUpdatedAt(Instant.now());
+            clientProductPreferenceRepository.save(productPreference);
+        }
+    }
+
+    @KafkaListener(topics = TopicNames.CART_EVENTS, groupId = "hungry-kafka-group")
+    @Transactional
+    public void handleCartEvent(ConsumerRecord<String, String> record) {
+        CartEvent event;
+        try {
+            event = objectMapper.readValue(record.value(), CartEvent.class);
+        } catch (JsonProcessingException e) {
+            log.error("Failed to deserialize CartEvent from record: {}", record.value(), e);
+            return;
+        }
+
+        if (!event.action().name().equals("ADDED")) {
+            return;
+        }
+
+        Client client = clientRepository.findById(event.clientId()).orElse(null);
+        if (client == null) {
+            return;
+        }
+
+        Product product = productRepository.findById(event.productId()).orElse(null);
+        if (product == null) {
+            return;
+        }
+
+        Integer categoryId = product.getCategory() != null ? product.getCategory().getId() : null;
+        if (categoryId == null) {
+            return;
+        }
+
+        ClientCategoryPreferenceId categoryPrefId = new ClientCategoryPreferenceId(event.clientId(), categoryId);
+        ClientCategoryPreference categoryPref = clientCategoryPreferenceRepository.findById(categoryPrefId).orElse(null);
+
+        if (categoryPref == null) {
+            categoryPref = new ClientCategoryPreference();
+            categoryPref.setId(categoryPrefId);
+            categoryPref.setClient(client);
+            categoryPref.setValue(cartPreferenceMultiplier);
+            categoryPref.setUpdatedAt(Instant.now());
+            clientCategoryPreferenceRepository.save(categoryPref);
+        } else {
+            Float newValue = categoryPref.getValue() * cartPreferenceMultiplier;
+            categoryPref.setValue(newValue);
+            categoryPref.setUpdatedAt(Instant.now());
+            clientCategoryPreferenceRepository.save(categoryPref);
+        }
+
+        ClientProductPreferenceId productPrefId = new ClientProductPreferenceId(event.clientId(), event.productId());
+        ClientProductPreference productPref = clientProductPreferenceRepository.findById(productPrefId).orElse(null);
+
+        if (productPref == null) {
+            productPref = new ClientProductPreference();
+            productPref.setId(productPrefId);
+            productPref.setClient(client);
+            productPref.setValue(cartPreferenceMultiplier);
+            productPref.setUpdatedAt(Instant.now());
+            clientProductPreferenceRepository.save(productPref);
+        } else {
+            Float newValue = productPref.getValue() * cartPreferenceMultiplier;
+            productPref.setValue(newValue);
+            productPref.setUpdatedAt(Instant.now());
+            clientProductPreferenceRepository.save(productPref);
+        }
+    }
+
+    @KafkaListener(topics = TopicNames.ORDER_STATUS_EVENTS, groupId = "hungry-kafka-group")
+    @Transactional
+    public void handleUpdateOrderStatusEvent(ConsumerRecord<String, String> record) {
+        UpdateOrderStatusEvent event;
+        try {
+            event = objectMapper.readValue(record.value(), UpdateOrderStatusEvent.class);
+        } catch (JsonProcessingException e) {
+            return;
+        }
+
+        int orderId;
+        try {
+            orderId = Integer.parseInt(event.orderId().trim());
+        } catch (NumberFormatException e) {
+            return;
+        }
+
+        OrderEntity order = orderRepository.findById(orderId).orElse(null);
+        if (order == null) {
+            return;
+        }
+
+        String current = order.getStatus() != null ? order.getStatus().getName() : null;
+        if (current == null) {
+            return;
+        }
+
+        String target = event.status().name();
+        if (current.equals(target)) {
+            return;
+        }
+        if (!isAllowedStatusTransition(current, target)) {
+            return;
+        }
+
+        if ("OUT_FOR_DELIVERY".equals(target) && event.expectedDelivery() == null) {
+            return;
+        }
+
+        OrderStatusEntity next = orderStatusRepository.findByName(target).orElse(null);
+        if (next == null) {
+            return;
+        }
+
+        order.setStatus(next);
+        if ("OUT_FOR_DELIVERY".equals(target)) {
+            order.setExpectedDelivery(Instant.now().plus(event.expectedDelivery()));
+        }
+        orderRepository.save(order);
+
+        StoreOrderResponse storeOrderResponse = toStoreResponse(order);
+        ClientOrderResponse orderResponse = toResponse(order);
+
+        webSocketService.sendOrderUpdate(orderId, orderResponse, storeOrderResponse);
+    }
+
+    private static boolean isAllowedStatusTransition(String current, String target) {
+        return switch (current) {
+            case "CREATED" -> "ACCEPTED".equals(target) || "CANCELLED".equals(target);
+            case "ACCEPTED" -> "PREPARING".equals(target);
+            case "PREPARING" -> "OUT_FOR_DELIVERY".equals(target);
+            case "OUT_FOR_DELIVERY" -> "DELIVERED".equals(target);
+            case "CANCELLED" -> false;
+            default -> false;
+        };
+    }
+
+    private ClientOrderResponse toResponse(OrderEntity order) {
+        Integer clientId = order.getClient() != null ? order.getClient().getId() : null;
+        String status = order.getStatus() != null ? order.getStatus().getName() : null;
+        return new ClientOrderResponse(order.getId(), clientId, buildItemResponses(order), order.getCreatedAt(), order.getExpectedDelivery(), status);
+    }
+
+    private StoreOrderResponse toStoreResponse(OrderEntity order) {
+        Client client = order.getClient();
+        ClientDto clientDto = client != null ? new ClientDto(client.getId(), client.getName()) : null;
+        String status = order.getStatus() != null ? order.getStatus().getName() : null;
+        return new StoreOrderResponse(order.getId(), clientDto, buildItemResponses(order), order.getCreatedAt(), order.getExpectedDelivery(), status);
+    }
+
+    private List<OrderItemResponse> buildItemResponses(OrderEntity order) {
+        List<OrderItem> items = orderItemRepository.findByOrder_Id(order.getId());
+
+        Set<Integer> productIds = new HashSet<>();
+        for (OrderItem item : items) {
+            productIds.add(item.getProductId());
+        }
+
+        Map<Integer, Product> productsById = new HashMap<>();
+        for (Product product : productRepository.findAllById(productIds)) {
+            productsById.put(product.getId(), product);
+        }
+
+        List<OrderItemResponse> itemResponses = new ArrayList<>();
+        for (OrderItem item : items) {
+            Product product = productsById.get(item.getProductId());
+            if (product == null) {
+                continue;
+            }
+            itemResponses.add(new OrderItemResponse(toProductResponse(product), item.getQuantity()));
+        }
+        return itemResponses;
+    }
+
+    private ProductResponse toProductResponse(Product product) {
+        return new ProductResponse(product.getId(), product.getName(), product.getDescription(), product.getPrice(), product.getPhotoUrl(), 1.0f);
+    }
+}

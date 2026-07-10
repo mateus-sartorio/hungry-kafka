@@ -1,0 +1,71 @@
+spring:
+  application:
+    name: hungry-kafka
+
+  # SQLite Database Configuration
+  datasource:
+    url: jdbc:sqlite:hungry-kafka.db
+    driver-class-name: org.sqlite.JDBC
+  jpa:
+    hibernate:
+      ddl-auto: none
+    properties:
+      hibernate:
+        dialect: org.hibernate.community.dialect.SQLiteDialect
+
+  # Flyway Migrations
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+
+  # Kafka
+  kafka:
+    bootstrap-servers: localhost:9092
+    consumer:
+      group-id: hungry-kafka-group
+      auto-offset-reset: earliest
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      value-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+    producer:
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.springframework.kafka.support.serializer.JsonSerializer
+    # Kafka Streams Properties
+    streams:
+      properties:
+        cache.max.bytes.buffering: 0
+        commit.interval.ms: 100
+
+logging:
+  level:
+    org.flywaydb: DEBUG
+
+# Application Configuration
+app:
+  kafka:
+    startup:
+      max-retries: 20
+      retry-delay-ms: 1000
+
+  # Preference Multipliers
+  preference:
+    cart:
+      multiplier: 1.01
+    itemview:
+      multiplier: 1.05
+    order:
+      multiplier: 1.10
+
+  # Hot Item Detection Configuration
+  hot-item:
+    threshold: 10
+    window-minutes: 1
+    duration-seconds: 15
+
+  # Hot Lead Detection Configuration
+  hot-lead:
+    view-window-minutes: 1
+    view-threshold: 5
+
+  # Abandoned Cart Detection Configuration
+  abandoned-cart:
+    window-minutes: 1

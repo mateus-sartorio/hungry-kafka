@@ -25,7 +25,7 @@ INSERT OR IGNORE INTO product (name, description, price, photo_url, category_id)
 INSERT OR IGNORE INTO product (name, description, price, photo_url, category_id) VALUES
 ('Chicken Teriyaki', 'Grilled chicken glazed with teriyaki sauce, served with rice', 14.00, 'https://upload.wikimedia.org/wikipedia/commons/thumb/9/91/22nd_June_2012_Teriyaki_Duck.jpg/960px-22nd_June_2012_Teriyaki_Duck.jpg', (SELECT id FROM category WHERE name='Japanese'));
 
--- Lunchbox (Marmita / Lunchbox)
+-- Lunchbox
 INSERT OR IGNORE INTO product (name, description, price, photo_url, category_id) VALUES
 ('Beef Lunchbox', 'Rice, beans, grilled beef, salad and farofa', 13.00, 'https://upload.wikimedia.org/wikipedia/commons/thumb/a/a8/NCI_Visuals_Food_Meal_Lunch.jpg/960px-NCI_Visuals_Food_Meal_Lunch.jpg', (SELECT id FROM category WHERE name='Lunchbox'));
 INSERT OR IGNORE INTO product (name, description, price, photo_url, category_id) VALUES

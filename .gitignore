@@ -30,4 +30,7 @@ build/
 !**/src/test/**/build/
 
 # Local SQLite database
-queue-sine.db
+hungry-kafka.db
+
+# claude
+/.claude
