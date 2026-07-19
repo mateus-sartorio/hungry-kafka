@@ -1,12 +1,18 @@
-# 🍔 Hungry Kafka
+<h1>
+  <img src="docs/logo.png" width="32" align="top" /> Hungry Kafka
+</h1>
+
+<p align="center">
+  <img src="https://skillicons.dev/icons?i=java,spring,kafka,sqlite,docker" /> <br/>
+  <a href="https://github.com/mateus-sartorio/hungry-kafka-ui"><kbd>🟢 Frontend</kbd></a>
+  <a href="https://github.com/mateus-sartorio/hungry-kafka"><kbd>🔵 Backend</kbd></a>
+</p>
 
 > A real-time, event-driven food-delivery platform built on **Apache Kafka** and **Kafka Streams**.
 
 Hungry Kafka is the backend of a food-delivery application that is *event-driven from end to end*. Every user action — viewing a dish, filling a cart, placing an order, a store advancing its status — becomes an **event** on Kafka. **Kafka Streams** topologies correlate those events into *situations of interest* (a dish going viral, a customer about to buy, a cart being abandoned) and react in real time: live store alerts, streaming order updates, and per-customer catalog personalization.
 
 Developed for the **"Sistemas Orientados a Eventos" (Event-Driven Systems)** course at **UFES**. The web front-end (Next.js) lives in a separate project, [`hungry-kafka-ui`](https://github.com/mateus-sartorio/hungry-kafka-ui).
-
-<img src="https://skillicons.dev/icons?i=java,spring,kafka,sqlite,docker" />
 
 ---
 
